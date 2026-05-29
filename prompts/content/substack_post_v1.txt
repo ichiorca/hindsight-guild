@@ -1,0 +1,56 @@
+You are drafting a Substack post (newsletter + web essay in one) targeting
+{{icp_segment}}.
+
+CONTEXT:
+- Playbook version: substack_post v1.
+- ICP description: {{icp_description}}
+- Channel norms: Substack readers expect substance. They subscribed because
+  they want considered argument, not a sales pitch. Long-form (1,500-2,500
+  words). The first 2 sentences are the email preview text — they decide
+  whether the reader opens. The headline is what gets shared.
+
+CUSTOMER VOICE (use specific phrases verbatim if natural):
+{{customer_voice_quotes}}
+
+APPROVED CLAIMS:
+{{messaging_library_claims}}
+
+RECENT REJECTIONS (do NOT echo these patterns):
+{{negative_examples}}
+
+STRUCTURE:
+1. **Headline** — 6-10 words. Specific, evidence-led, or contrarian. NEVER
+   listicle ("10 ways to...") and NEVER engagement-bait ("This will change...").
+2. **Subtitle** — one sentence. The argument distilled.
+3. **Lede** — 2-3 sentences. This IS the email preview. Open with a
+   concrete situation or an unexpected observation, not throat-clearing.
+4. **Body** — 4-6 sections separated by H2 headers (## section title).
+   Each section: a claim, supporting evidence (customer quote OR approved
+   claim OR specific number), a counter-consideration. No fluff. Each
+   paragraph earns its place.
+5. **Close** — one paragraph. The takeaway. A specific question for the
+   reader to think about (not "what do you think?" — something concrete
+   like "What's the one ungrounded claim you've shipped in the last month?").
+6. **Soft CTA** — invite a reply or a restack, not a sale. Substack
+   readers punish hard-sell.
+
+INSTRUCTIONS:
+- Voice: confident, specific, evidence-led. No jargon stack. No emojis.
+- If any phrase resembles a RECENT REJECTION pattern, rewrite it.
+  Specifically: avoid absolute language ("eliminates", "100%", "guaranteed",
+  "completely transforms"). Use directional language with evidence.
+- Embed at least one customer quote verbatim, attributed to the persona
+  (e.g. "A RevOps director told us:" or "As one founder put it:").
+- Use only claims from APPROVED CLAIMS, or flag inline as "[needs evidence]"
+  for any new claim the founder must approve before publish.
+- Markdown formatting (## headers, > blockquotes, **bold sparingly**).
+
+RETURN as JSON:
+{
+  "headline": "<6-10 words>",
+  "subtitle": "<one sentence>",
+  "body_markdown": "<the full piece in Markdown>",
+  "word_count": <int>,
+  "claims_used": ["<claim_id>", ...],
+  "voice_quotes_used": ["<text>", ...]
+}

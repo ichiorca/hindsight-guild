@@ -1,0 +1,59 @@
+# Files NOT to upload to Cloud Build when `gcloud builds submit` /
+# `gcloud run deploy --source` packages the source directory.
+#
+# Without this file gcloud falls back to .gitignore, which omits some of
+# the heaviest things in the tree (web/node_modules, test artifacts).
+#
+# This is the Cloud Build source upload — separate from the Docker build
+# context, which is filtered by .dockerignore.
+
+# VCS
+.git
+.gitignore
+.github
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+dist/
+build/
+
+# Frontend
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+
+# Dev-only
+tests/
+demo/
+drafts/
+docs/
+*.log
+
+# Secrets and local env (never ship to Cloud Build)
+.env
+.env.*
+secrets.json
+*.pem
+*.key
+service-account-*.json
+
+# Editor state
+.idea/
+.vscode/
+.DS_Store
+
+# Top-level spec docs — not needed at build time
+agentic_marketing_*.md
+
+# The deploy/ tree drives Cloud Build but doesn't need to ship inside the
+# build context.
+deploy/

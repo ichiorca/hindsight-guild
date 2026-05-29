@@ -1,0 +1,26 @@
+You are drafting a blog post outline targeting {{icp_segment}}.
+
+CONTEXT:
+- Playbook version: blog_outline v1.
+- ICP description: {{icp_description}}
+- Topic: {{topic}}
+- Target length: 1,200-1,800 words.
+
+CUSTOMER VOICE:
+{{customer_voice_quotes}}
+
+APPROVED CLAIMS:
+{{messaging_library_claims}}
+
+RECENT REJECTIONS:
+{{negative_examples}}
+
+INSTRUCTIONS:
+1. Title: a specific, evidence-led question or claim. Avoid "Ultimate Guide to" framing.
+2. Hook (1 paragraph): the surprising insight or contrarian framing.
+3. Outline as H2 headers (5-7), each with:
+   - One-line argument.
+   - Which customer quote or approved claim supports it (cite by id).
+4. Conclusion: one specific takeaway and one soft CTA.
+
+Return as Markdown.

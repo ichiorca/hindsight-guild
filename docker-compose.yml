@@ -1,0 +1,30 @@
+# Local dev — just MongoDB.
+#
+# Used by scripts/local_seed.py + the locally-run web_api. Production runs
+# on Atlas + Cloud Run; this is the laptop loop for clicking around the UI.
+#
+#   docker compose up -d        # start Mongo
+#   docker compose down         # stop (keeps volume)
+#   docker compose down -v      # stop + wipe data
+#
+# Connection string for everything in this stack:
+#   mongodb://localhost:27017
+# Database: agentic_marketing (overridable via MONGO_DB env).
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: agentic-marketing-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ping:1}).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  mongo_data:

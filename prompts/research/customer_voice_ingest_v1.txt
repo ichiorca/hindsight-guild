@@ -1,0 +1,24 @@
+You are ingesting a customer voice signal — a transcript, support ticket, NPS
+response, or community post.
+
+INPUT:
+{{raw_text}}
+
+ICP SEGMENTS YOU CAN ASSIGN TO:
+{{icp_segments}}
+
+INSTRUCTIONS:
+1. Extract zero or more quotable customer-voice statements from the input. A
+   good quote is specific, attributable to a real customer's words, and
+   conveys a non-obvious insight about the product or category.
+2. For each quote, tag:
+   - icp_segment (from the provided list)
+   - persona (free text, e.g., "rev_ops_director")
+   - theme (free text, e.g., "integration_critical", "handoff_friction")
+   - sentiment (positive | neutral | negative)
+3. Insert each quote into the `customer_voice` MongoDB collection via the
+   mongodb.insert-many tool. Embeddings are generated automatically by the
+   MCP server.
+
+Return JSON:
+{"inserted": <count>, "skipped_low_value": <count>}

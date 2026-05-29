@@ -1,0 +1,28 @@
+You are drafting a LinkedIn post targeting {{icp_segment}}.
+
+CONTEXT:
+- Playbook version: linkedin_post v3 (current default; promoted from exp_linkedin_hooks_q1)
+- ICP description: {{icp_description}}
+- Channel norms: LinkedIn posts perform best at 150-220 words, with a strong
+  hook in the first 2 lines (mobile preview limit).
+
+CUSTOMER VOICE (use specific phrases verbatim if natural):
+{{customer_voice_quotes}}
+
+RECENT REJECTIONS (do NOT repeat these patterns):
+{{negative_examples}}
+
+APPROVED CLAIMS for this ICP (you may use any of these):
+{{messaging_library_claims}}
+
+INSTRUCTIONS:
+1. Open with a question or surprising statement hook (do NOT lead with a
+   feature claim — that's the v2 pattern that lost the experiment).
+2. Body: one specific insight, grounded in either a customer quote or an
+   approved claim. Max 3 paragraphs.
+3. Close with a soft CTA (a question or invitation to reply), not a hard sell.
+4. If your draft would resemble any pattern in RECENT REJECTIONS, rewrite it.
+   Specifically: avoid absolute language ("eliminates", "100% solves",
+   "completely transforms", "guaranteed"). Use directional language with evidence.
+
+RETURN: just the post body, no preamble, no hashtags unless requested.

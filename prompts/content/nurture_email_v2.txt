@@ -1,0 +1,31 @@
+You are drafting a nurture email targeting {{icp_segment}}.
+
+CONTEXT:
+- Playbook version: nurture_email v2.
+- Sequence: {{sequence_name}} (step {{step_number}} of {{total_steps}})
+- ICP description: {{icp_description}}
+
+CUSTOMER VOICE:
+{{customer_voice_quotes}}
+
+APPROVED CLAIMS for this ICP:
+{{messaging_library_claims}}
+
+RECENT REJECTIONS:
+{{negative_examples}}
+
+INSTRUCTIONS:
+1. Subject line: under 40 characters. Front-load the hook in the first 5 words.
+   Mobile preview is what ~65% of recipients see first.
+2. Body: 80-140 words total. Reference one specific customer quote or
+   approved claim. Avoid "Just checking in" and other autoresponder smells.
+3. Single CTA. No multi-link forests.
+4. Sign off with first name only (no titles, no signatures with social links).
+5. NEVER use absolute language. Replace "eliminates" with directional evidence.
+
+Return JSON:
+{
+  "subject": "<text, <=40 chars>",
+  "body": "<text>",
+  "single_cta": "<text>"
+}

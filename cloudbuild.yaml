@@ -1,0 +1,217 @@
+# Cloud Build pipeline: build every container image in parallel, push to
+# Artifact Registry, tag with both :latest and :$SHORT_SHA.
+#
+# Triggered by deploy/01-build-images.sh, which runs:
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_REGION=us-central1,_WEB_API_URL=<deployed-web-api-url>
+#
+# All 17 builds run with waitFor: ['-'] so they fan out as soon as the
+# build VM is up. On an E2_HIGHCPU_8 machine the whole pipeline takes
+# ~5-7 min vs ~25 min sequentially.
+#
+# Artifact Registry repo `agentic-marketing` in $_REGION is created by
+# deploy/01-build-images.sh (gcloud is idempotent on `repositories create`).
+
+substitutions:
+  _REGION: us-central1
+  _REPO: agentic-marketing
+  # The UI bakes VITE_API_URL into its JS bundle at build time. Override
+  # at submit time once the web-api service is deployed and its URL known.
+  _WEB_API_URL: /api
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+  dynamic_substitutions: true
+
+# 30 min cap for the whole fan-out. Individual builds are well under this.
+timeout: 1800s
+
+# Naming convention for every image:
+#   ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/<name>:latest
+#   ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/<name>:$SHORT_SHA
+
+steps:
+  # -----------------------------------------------------------------------
+  # Agent base image — used by every A2A Cloud Run service.
+  # Python 3.12 + Node 22 LTS + globally-installed mongodb-mcp-server.
+  # -----------------------------------------------------------------------
+  - id: agent-base
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent-base:latest
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent-base:$SHORT_SHA
+      - -f
+      - Dockerfile
+      - .
+
+  # -----------------------------------------------------------------------
+  # Worker jobs — Python-only slim images. One image per cron service.
+  # -----------------------------------------------------------------------
+  - id: outcome-attach
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/outcome-attach:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/outcome-attach:$SHORT_SHA',
+           -f, services/outcome_attach/Dockerfile, .]
+
+  - id: drift-detect
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/drift-detect:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/drift-detect:$SHORT_SHA',
+           -f, services/drift_detect/Dockerfile, .]
+
+  - id: eval-harness
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/eval-harness:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/eval-harness:$SHORT_SHA',
+           -f, services/eval_harness/Dockerfile, .]
+
+  - id: promotion-gate
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/promotion-gate:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/promotion-gate:$SHORT_SHA',
+           -f, services/promotion_gate/Dockerfile, .]
+
+  - id: self-critique
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/self-critique:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/self-critique:$SHORT_SHA',
+           -f, services/self_critique/Dockerfile, .]
+
+  - id: snapshot-mongo
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/snapshot-mongo:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/snapshot-mongo:$SHORT_SHA',
+           -f, services/snapshot_mongo/Dockerfile, .]
+
+  - id: derive-track-records
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/derive-track-records:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/derive-track-records:$SHORT_SHA',
+           -f, services/derive_track_records/Dockerfile, .]
+
+  - id: substack-publish-sweep
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publish-sweep:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publish-sweep:$SHORT_SHA',
+           -f, services/substack_publish_sweep/Dockerfile, .]
+
+  - id: ops-qa-sweep
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ops-qa-sweep:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ops-qa-sweep:$SHORT_SHA',
+           -f, services/ops_qa_sweep/Dockerfile, .]
+
+  - id: positioning-review
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/positioning-review:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/positioning-review:$SHORT_SHA',
+           -f, services/positioning_review/Dockerfile, .]
+
+  - id: paid-media-sweep
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/paid-media-sweep:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/paid-media-sweep:$SHORT_SHA',
+           -f, services/paid_media_sweep/Dockerfile, .]
+
+  # -----------------------------------------------------------------------
+  # HTTP services — Flask/FastAPI/Gunicorn images for the web tier.
+  # -----------------------------------------------------------------------
+  - id: edit-capture-handler
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/edit-capture-handler:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/edit-capture-handler:$SHORT_SHA',
+           -f, services/edit_capture_handler/Dockerfile, .]
+
+  - id: slack-approval-handler
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/slack-approval-handler:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/slack-approval-handler:$SHORT_SHA',
+           -f, services/slack_approval_handler/Dockerfile, .]
+
+  - id: substack-publisher
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publisher:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publisher:$SHORT_SHA',
+           -f, services/substack_publisher/Dockerfile, .]
+
+  - id: web-api
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-api:latest',
+           -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-api:$SHORT_SHA',
+           -f, services/web_api/Dockerfile, .]
+
+  # -----------------------------------------------------------------------
+  # UI — Vite build + nginx static serve. VITE_API_URL baked at build time.
+  # Build context is web/ (smaller; node_modules excluded by .dockerignore).
+  # -----------------------------------------------------------------------
+  - id: ui
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    dir: web
+    args:
+      - build
+      - --build-arg
+      - VITE_API_URL=${_WEB_API_URL}
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:latest
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:$SHORT_SHA
+      - .
+
+# Every image listed here gets pushed once its build step succeeds. Cloud
+# Build's `images:` block parallelizes the pushes too.
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent-base:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent-base:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/outcome-attach:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/outcome-attach:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/drift-detect:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/drift-detect:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/eval-harness:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/eval-harness:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/promotion-gate:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/promotion-gate:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/self-critique:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/self-critique:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/snapshot-mongo:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/snapshot-mongo:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/derive-track-records:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/derive-track-records:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publish-sweep:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publish-sweep:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ops-qa-sweep:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ops-qa-sweep:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/positioning-review:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/positioning-review:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/paid-media-sweep:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/paid-media-sweep:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/edit-capture-handler:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/edit-capture-handler:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/slack-approval-handler:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/slack-approval-handler:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publisher:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publisher:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-api:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-api:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:$SHORT_SHA

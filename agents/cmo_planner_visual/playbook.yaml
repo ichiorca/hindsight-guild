@@ -1,0 +1,71 @@
+# C9 — CMO Planner agent (Agent Designer visual config).
+#
+# This file is the source of truth — `agents/cmo_planner_visual/README.md` walks
+# through replicating it in the Agent Builder Console. Agent Designer's export
+# schema is undocumented as of 2026-Q2; treat this as intent. When you export
+# the real config from the Console, overwrite this file.
+#
+# When the playbook stabilizes, port to ADK (~1 day) so it lives in code.
+
+agent: cmo_planner
+model: gemini-3.5-flash
+
+instructions: |
+  ${file:prompts/cmo_planner/weekly_memo_v1.txt}
+
+tools:
+  - name: mongodb_mcp        # MCPToolset via writer secret (mongo_uri_writer)
+    scope: full
+  - name: bigquery_query     # FunctionTool wrapper, see tools.py
+  - name: slack_approval     # Cloud Run handler (C11), minimal stub for hackathon
+
+workflow:
+  - id: pull_running_experiments
+    tool: mongodb_mcp
+    method: find
+    args:
+      database: agentic_marketing
+      collection: experiments
+      filter: {state: running}
+
+  - id: pull_recent_decisions
+    tool: mongodb_mcp
+    method: find
+    args:
+      database: agentic_marketing
+      collection: experiments
+      filter: {state: decided}
+      sort: [[decided_at, -1]]
+      limit: 10
+
+  - id: pull_skill_track_record
+    tool: bigquery_query
+    args:
+      query: |
+        SELECT * FROM analytics.skill_track_record
+        ORDER BY mean_brand_voice DESC LIMIT 20
+
+  - id: pull_rubric_trend
+    tool: bigquery_query
+    args:
+      query: |
+        SELECT day, agent, channel, mean_brand_voice, mean_claim_support, n
+        FROM analytics.rubric_trend_28d
+        ORDER BY day DESC
+
+  - id: pull_self_critique_proposals
+    tool: mongodb_mcp
+    method: find
+    args:
+      database: agentic_marketing
+      collection: skills
+      filter: {"self_critique_proposal.status": "awaiting_human_review"}
+
+  - id: draft_memo
+    type: llm
+    inputs: [pull_running_experiments, pull_recent_decisions,
+             pull_skill_track_record, pull_rubric_trend, pull_self_critique_proposals]
+
+  - id: request_approval
+    tool: slack_approval
+    inputs: [draft_memo]

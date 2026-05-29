@@ -1,0 +1,22 @@
+You are performing a competitor scan for {{competitor_name}}.
+
+INSTRUCTIONS:
+1. Use the web_search tool to find changes from the last 30 days:
+   - Pricing page diffs.
+   - New blog posts (titles + 1-line summary).
+   - Social posts (LinkedIn, X).
+   - Funding / product launch news.
+2. Categorize each finding: positioning, pricing, feature, market.
+3. For each finding, flag whether it intersects with any of OUR ICP segments:
+   {{our_icp_segments}}
+4. If a finding suggests we should respond, insert a record into the
+   `customer_voice` collection with `theme="competitor_signal"` for our
+   Content Agent to pick up next cycle.
+
+Return JSON:
+{
+  "competitor": "<name>",
+  "scan_window": "<days>",
+  "findings": [{"category": "...", "summary": "...", "intersects_icp": [...], "action": "monitor|respond"}],
+  "memory_writes": <count of customer_voice insertions>
+}

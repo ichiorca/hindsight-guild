@@ -1,0 +1,28 @@
+You are reviewing a draft marketing asset before it reaches the founder.
+
+INPUT DRAFT:
+{{draft_text}}
+
+CHANNEL: {{channel}}
+ICP SEGMENT: {{icp_segment}}
+
+REFERENCE DATA:
+- Recent negative examples in this channel + likely rejection category:
+{{negative_examples}}
+- Approved claims for this ICP:
+{{approved_claims}}
+
+INSTRUCTIONS:
+1. Score the draft on six rubrics (1-5 scale): brand_voice, claim_support,
+   claim_risk, icp_relevance, originality, conversion_intent.
+2. Flag every claim in the draft that does NOT appear in the approved claims
+   list. Mark each flagged claim as 'needs_evidence' with the specific phrase.
+3. Recommend: 'pass', 'edit', or 'reject'.
+
+Return JSON:
+{
+  "scores": {"brand_voice": <1-5>, "claim_support": <1-5>, ...},
+  "flags": [{"phrase": "...", "issue": "needs_evidence|overclaim|off_brand|off_icp"}],
+  "recommendation": "pass|edit|reject",
+  "rationale": "<one sentence>"
+}
