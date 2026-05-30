@@ -14,6 +14,7 @@ agent run.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import uuid
@@ -28,6 +29,34 @@ from shared.telemetry import (
     TelemetryRecord,
     emit_action,
 )
+
+
+def _should_eval(telemetry_id: str | None) -> bool:
+    """Cost control for rubric scoring.
+
+    score_draft runs the Vertex Eval Service over 7 rubrics — ~7 judge LLM
+    calls per draft, the single biggest LLM multiplier in the pipeline (it
+    roughly DOUBLES the LLM calls of a draft). Sample a deterministic fraction
+    of drafts keyed on telemetry_id (so retries score consistently) instead of
+    scoring every one. The promotion gate + rubric-trend still get a
+    representative stream at a fraction of the cost.
+
+    Controlled by EVAL_SAMPLE_RATE (default 0.25 = score 1-in-4). Set to 1 to
+    score every draft (the old behaviour), or 0 to disable inline scoring
+    entirely (e.g. score in a nightly batch instead).
+    """
+    try:
+        rate = float(os.environ.get("EVAL_SAMPLE_RATE", "0.25"))
+    except ValueError:
+        rate = 0.25
+    if rate >= 1.0:
+        return True
+    if rate <= 0.0:
+        return False
+    if not telemetry_id:
+        return True
+    bucket = int(hashlib.blake2b(telemetry_id.encode(), digest_size=8).hexdigest(), 16)
+    return (bucket % 10_000) / 10_000.0 < rate
 
 
 def _coerce_draft(value):
@@ -124,7 +153,7 @@ def make_after_callback(agent_name: str, skill_id: str, action_type: str,
                 output_text = draft_value
 
             eval_scores = None
-            if action_type.startswith("draft_") and output_text:
+            if action_type.startswith("draft_") and output_text and _should_eval(state.get("telemetry_id")):
                 try:
                     scores = score_draft(
                         candidate=output_text,
