@@ -26,13 +26,13 @@ async def main():
     session_service = InMemorySessionService()
     runner = Runner(
         agent=cmo_planner,
-        app_name="agentic-marketing-cmo",
+        app_name="hindsight-guild-cmo",
         session_service=session_service,
     )
 
     user_id = "founder"
     session = await session_service.create_session(
-        app_name="agentic-marketing-cmo", user_id=user_id,
+        app_name="hindsight-guild-cmo", user_id=user_id,
         state={"current_week": args.week or "current"},
     )
 
@@ -51,7 +51,7 @@ async def main():
                     print(part.text)
 
     final = await session_service.get_session(
-        app_name="agentic-marketing-cmo", user_id=user_id, session_id=session.id
+        app_name="hindsight-guild-cmo", user_id=user_id, session_id=session.id
     )
     state = final.state if final else {}
     print("\n--- WEEKLY PLAN ---")

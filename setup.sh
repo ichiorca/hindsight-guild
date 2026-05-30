@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# C0 — Project bootstrap. Idempotent: re-runnable. See agentic_marketing_implementation_plan.md §3.
+# C0 — Project bootstrap. Idempotent: re-runnable. See hindsight_guild_implementation_plan.md §3.
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-agentic-marketing-mvp}"
+PROJECT_ID="${PROJECT_ID:-gen-lang-client-0079238279}"
 REGION="${REGION:-us-central1}"
-BILLING_ACCOUNT="${BILLING_ACCOUNT:?must set BILLING_ACCOUNT (find via: gcloud beta billing accounts list)}"
+BILLING_ACCOUNT="${BILLING_ACCOUNT:-01891A-AB7C74-7D1629}"
 
 echo "==> Bootstrapping $PROJECT_ID in $REGION"
 
 # 1. Project
-gcloud projects create "$PROJECT_ID" --name="Agentic Marketing MVP" || true
+gcloud projects create "$PROJECT_ID" --name="Hindsight Guild" || true
 gcloud config set project "$PROJECT_ID"
 gcloud beta billing projects link "$PROJECT_ID" --billing-account "$BILLING_ACCOUNT"
 
@@ -28,6 +28,8 @@ APIS=(
   storage.googleapis.com
   artifactregistry.googleapis.com
   cloudbuild.googleapis.com
+  firebase.googleapis.com
+  firebasehosting.googleapis.com
   iam.googleapis.com
   modelarmor.googleapis.com
 )
@@ -60,12 +62,12 @@ if ! command -v atlas &>/dev/null; then
 fi
 atlas projects create "${PROJECT_ID}-atlas" 2>/dev/null || true
 ATLAS_PROJECT_ID="$(atlas projects list -o json | jq -r ".results[] | select(.name==\"${PROJECT_ID}-atlas\") | .id")"
-atlas clusters create agentic-mvp \
+atlas clusters create hindsight-guild \
   --provider GCP --region "${REGION^^}" --tier M0 \
   --projectId "$ATLAS_PROJECT_ID" 2>/dev/null || true
 
 echo "==> Atlas cluster created. Waiting for it to be IDLE (this can take 3-5 min)..."
-atlas clusters watch agentic-mvp --projectId "$ATLAS_PROJECT_ID"
+atlas clusters watch hindsight-guild --projectId "$ATLAS_PROJECT_ID"
 
 # 7. Capture Atlas connection string into Secret Manager
 # We populate this interactively because the CLI doesn't include passwords by default.

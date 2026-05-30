@@ -19,7 +19,7 @@ import os
 
 log = logging.getLogger(__name__)
 
-_PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+_PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 
 # Lazy: holding off on importing google.cloud.bigquery until needed so
 # LOCAL_DEV-only test runs don't pay the heavy import cost.

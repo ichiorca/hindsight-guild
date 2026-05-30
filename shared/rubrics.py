@@ -34,7 +34,7 @@ from shared import mongo_tools
 
 log = logging.getLogger(__name__)
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 LOCATION = os.environ.get("REGION", "us-central1")
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "gemini-3.1-flash-lite")
 

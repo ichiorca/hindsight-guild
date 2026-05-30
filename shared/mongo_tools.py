@@ -31,8 +31,8 @@ from pymongo import MongoClient
 if TYPE_CHECKING:
     from google.cloud import secretmanager
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
-DB_NAME = os.environ.get("MONGO_DB", "agentic_marketing")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
+DB_NAME = os.environ.get("MONGO_DB", "hindsight_guild")
 _DEFAULT_SECRET = os.environ.get("MONGO_SECRET_NAME", "mongo_uri_writer")
 
 # Cache one MongoClient per Secret Manager secret name. This avoids the

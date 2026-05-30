@@ -62,7 +62,7 @@ AGENT_SCOPES = {
 # Env var configuration for the MCP server subprocess
 # ---------------------------------------------------------------------------
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 
 
 def _secret(name: str) -> str:
@@ -142,7 +142,7 @@ def health_check() -> bool:
         return False
     try:
         client = MongoClient(uri, serverSelectionTimeoutMS=5000)
-        names = client[os.environ.get("MONGO_DB", "agentic_marketing")].list_collection_names()
+        names = client[os.environ.get("MONGO_DB", "hindsight_guild")].list_collection_names()
         print(f"OK: connected. Collections: {names}")
         return True
     except Exception as e:

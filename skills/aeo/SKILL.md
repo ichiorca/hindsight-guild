@@ -270,6 +270,6 @@ The aeo_agent registers these tools (defined in `scripts/aeo/`):
 
 ## Last verified
 
-2026-05-28 against `agentic_marketing_functional_spec.md §7.4` (rubric
+2026-05-28 against `hindsight_guild_functional_spec.md §7.4` (rubric
 set) and the claude-seo `seo-geo` v2.0.0 reference. Update on next
 quarterly judge recalibration.

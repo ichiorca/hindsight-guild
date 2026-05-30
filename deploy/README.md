@@ -8,7 +8,7 @@ project, service accounts, secrets, and Atlas cluster are already there.
 ## One-time bootstrap (run from repo root)
 
 ```bash
-export PROJECT_ID=agentic-marketing-mvp
+export PROJECT_ID=hindsight-guild-mvp
 export REGION=us-central1                  # optional, this is the default
 export BILLING_ACCOUNT=<billing-id>        # gcloud beta billing accounts list
 

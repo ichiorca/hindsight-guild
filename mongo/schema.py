@@ -27,8 +27,8 @@ from pymongo.operations import SearchIndexModel
 # so local-only callers (e.g., scripts/local_seed via MONGO_URI_DIRECT)
 # don't need google-cloud-secret-manager installed.
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
-DB_NAME = os.environ.get("MONGO_DB", "agentic_marketing")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
+DB_NAME = os.environ.get("MONGO_DB", "hindsight_guild")
 SECRET_NAME = os.environ.get("MONGO_SECRET_NAME", "mongo_uri_writer")
 
 COLLECTIONS = [

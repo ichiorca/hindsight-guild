@@ -2,7 +2,7 @@
 
 ## Sheet setup (manual)
 
-1. Create a new Google Sheet titled "Agentic Marketing — Approvals".
+1. Create a new Google Sheet titled "Hindsight Guild — Approvals".
 2. Rename the first tab to **`approvals`**.
 3. Row 1 (headers) — exactly these names, in this order:
 

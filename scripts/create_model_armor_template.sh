@@ -18,7 +18,7 @@ set -euo pipefail
 
 PROJECT_ID="${PROJECT_ID:?must set PROJECT_ID}"
 REGION="${REGION:-us-central1}"
-TEMPLATE_ID="agentic-marketing-floor"
+TEMPLATE_ID="hindsight-guild-floor"
 
 echo "==> 1. Enable Vertex AI integration at project floor"
 gcloud model-armor floorsettings update \

@@ -41,7 +41,7 @@ from shared import mongo_tools  # noqa: E402
 
 mongo_tools.use_secret("mongo_uri_writer")
 
-app = FastAPI(title="Agentic Marketing — Web API", version="0.2.0")
+app = FastAPI(title="Hindsight Guild — Web API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -62,7 +62,7 @@ _LOCAL_MEDIA_DIR = Path(
 _LOCAL_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(_LOCAL_MEDIA_DIR)), name="media")
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 REGION = os.environ.get("REGION", "us-central1")
 
 # LOCAL_DEV=1 lets the API boot without GCP credentials. BigQuery + Secret

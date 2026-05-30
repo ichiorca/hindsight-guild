@@ -1,0 +1,174 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design system v3 — oceanic, cool ink, ocean accents.
+ *
+ * Light mode is a soft ocean tint (a marketing surface with an underwater feel).
+ * Ocean blue is the "decision moments" color; teal is "this is working";
+ * deep navy ink is everything else.
+ *
+ * Each agent gets a distinct hue (see --agent-*) so they read as a team,
+ * but the hues live within a cool spectrum (teals → blues → cool violets)
+ * so the team palette stays coherent with the ocean chrome.
+ */
+@layer base {
+  :root {
+    /* Surfaces */
+    --background: 205 80% 95%;          /* ocean-50, soft underwater tint */
+    --foreground: 210 40% 10%;          /* deep navy ink */
+    --card: 0 0% 100%;                  /* white cards float on the tint */
+    --card-foreground: 210 40% 10%;
+    --muted: 200 35% 90%;
+    --muted-foreground: 210 20% 38%;
+    --subtle: 205 60% 93%;
+    --border: 200 30% 84%;
+    --input: 200 30% 84%;
+    --ring: 200 85% 45%;                /* ocean focus ring */
+
+    /* Decision accent — ocean blue */
+    --primary: 200 85% 45%;             /* ocean-500 #0090db — primary actions */
+    --primary-foreground: 0 0% 100%;
+
+    --accent: 180 60% 45%;              /* teal — secondary accent */
+    --accent-foreground: 0 0% 100%;
+
+    --secondary: 210 50% 18%;           /* deep navy — used for sub-actions */
+    --secondary-foreground: 0 0% 98%;
+
+    /* Status */
+    --success: 170 55% 38%;             /* sea-green — quieter than green */
+    --success-foreground: 0 0% 98%;
+    --warning: 38 90% 50%;              /* keep warm: warnings must stand out */
+    --warning-foreground: 210 40% 10%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Agent identity hues — cool spectrum, 12 still distinguishable */
+    --agent-research:        187 60% 42%;  /* teal */
+    --agent-content:         200 80% 50%;  /* ocean blue (was ember) */
+    --agent-review:          255 55% 60%;  /* cool violet */
+    --agent-analytics:       218 64% 50%;  /* steel blue */
+    --agent-cmo:             165 55% 38%;  /* sea green (was sage) */
+    --agent-positioning:     275 50% 52%;  /* purple */
+    --agent-customer-voice:  195 75% 48%;  /* cyan (was amber) */
+    --agent-lifecycle-email: 215 55% 55%;  /* periwinkle (was rose) */
+    --agent-paid-media:      230 45% 50%;  /* indigo-blue (was dusty red) */
+    --agent-ops-qa:          210 12% 42%;  /* slate */
+    --agent-self-critique:   240 50% 55%;  /* indigo */
+    --agent-image-brief:     295 50% 55%;  /* cool plum (was magenta) */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 210 55% 8%;           /* deep ocean */
+    --foreground: 190 30% 95%;
+    --card: 210 55% 12%;
+    --card-foreground: 190 30% 95%;
+    --muted: 205 30% 20%;
+    --muted-foreground: 195 15% 65%;
+    --subtle: 210 40% 14%;
+    --border: 205 40% 18%;
+    --input: 205 40% 18%;
+    --ring: 195 65% 55%;
+
+    --primary: 195 65% 55%;
+    --primary-foreground: 210 60% 8%;
+    --accent: 175 50% 40%;
+    --accent-foreground: 0 0% 98%;
+    --secondary: 190 30% 92%;
+    --secondary-foreground: 210 55% 8%;
+
+    --success: 170 55% 50%;
+    --success-foreground: 210 55% 8%;
+    --warning: 38 90% 60%;
+    --warning-foreground: 210 55% 8%;
+    --destructive: 0 70% 60%;
+    --destructive-foreground: 0 0% 98%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+  h1, h2, h3, h4 { @apply font-semibold tracking-tight; }
+
+  /* Editorial moment: long-form content (memos, lessons) uses a serif */
+  .prose-memo {
+    @apply font-serif text-foreground;
+  }
+  .prose-memo h2 { @apply text-2xl mt-8 mb-3; }
+  .prose-memo h3 { @apply text-lg mt-6 mb-2; }
+  .prose-memo p { @apply mb-4 leading-relaxed text-[15px]; }
+  .prose-memo ul { @apply list-disc pl-5 mb-4 space-y-1; }
+}
+
+@layer components {
+  .skeleton {
+    @apply relative overflow-hidden bg-muted rounded-md;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--border) / 0.5),
+      transparent
+    );
+    animation: shimmer 1.5s infinite;
+  }
+  /* Decision card — the accent stripe pattern */
+  .card-decision {
+    @apply relative;
+  }
+  .card-decision::before {
+    content: "";
+    @apply absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-xl;
+  }
+  /* Kbd styling — used for keyboard shortcut hints */
+  .kbd {
+    @apply inline-flex items-center justify-center min-w-[1.5rem] h-[1.5rem]
+           px-1.5 rounded border border-border bg-muted text-[11px]
+           font-mono font-medium text-muted-foreground;
+  }
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pop-success {
+  0%   { transform: scale(0.8); opacity: 0; }
+  50%  { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.animate-fade-in     { animation: fade-in 0.2s ease-out; }
+.animate-pop-success { animation: pop-success 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-pulse-soft  { animation: pulse-soft 1.8s ease-in-out infinite; }
+
+/* Respect reduced-motion: disable animations + smooth-scroll for users who
+   ask for it (vestibular accessibility). Covers the custom keyframes above
+   plus Tailwind/animate utilities and any animate-spin/ping/pulse. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

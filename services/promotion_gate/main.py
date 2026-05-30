@@ -34,7 +34,7 @@ from shared.clients import bigquery_client
 
 mongo_tools.use_secret("mongo_uri_writer")
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 log = logging.getLogger(__name__)
 
 

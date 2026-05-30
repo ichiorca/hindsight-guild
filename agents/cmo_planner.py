@@ -33,7 +33,7 @@ from agents.web_search import web_search_tool
 # multi-agent a2a_server would otherwise overwrite reader/writer intent based
 # on import order (see C5 in the codebase review).
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 _sm: secretmanager.SecretManagerServiceClient | None = None
 
 

@@ -89,7 +89,7 @@ def bootstrap_env() -> None:
         "MONGO_URI_DIRECT",
         os.environ.get("MONGO_URI_DIRECT", "mongodb://localhost:27017"),
     )
-    os.environ.setdefault("MONGO_DB", "agentic_marketing")
+    os.environ.setdefault("MONGO_DB", "hindsight_guild")
     os.environ.setdefault("PROJECT_ID", "local-dev")
     os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "0")
 

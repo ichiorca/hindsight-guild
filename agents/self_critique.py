@@ -32,7 +32,7 @@ from shared.bigquery_helper import bigquery_query
 
 log = logging.getLogger(__name__)
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 _AGENT_ID = "self_critique_agent"
 _VALID_CONFIDENCE = ("high", "medium", "low")
 

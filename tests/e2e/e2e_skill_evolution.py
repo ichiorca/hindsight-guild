@@ -37,7 +37,7 @@ Setup constraints (intentional choices, confirmed with the operator):
     seeds a single test skill there. The production skills/ tree is
     NEVER touched. Teardown wipes the tmpdir.
 
-Usage (from agentic-marketing/, Docker Mongo up, .env populated):
+Usage (from hindsight-guild/, Docker Mongo up, .env populated):
 
     python -m tests.e2e.e2e_skill_evolution                 # all 11 phases
     python -m tests.e2e.e2e_skill_evolution --phases 1,2,3  # subset

@@ -399,7 +399,7 @@ def _boot_api(port: int) -> subprocess.Popen:
     env = os.environ.copy()
     env.setdefault("LOCAL_DEV", "1")
     env.setdefault("MONGO_URI_DIRECT", "mongodb://localhost:27017")
-    env.setdefault("MONGO_DB", "agentic_marketing")
+    env.setdefault("MONGO_DB", "hindsight_guild")
     env.setdefault("PROJECT_ID", "local-dev")
     env.setdefault("DRAFTING_FALLBACK", "synthetic")
     cmd = [

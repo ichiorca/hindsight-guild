@@ -82,14 +82,14 @@ async def main():
     session_service = InMemorySessionService()
     runner = Runner(
         agent=drafting_pipeline,
-        app_name="agentic-marketing-demo",
+        app_name="hindsight-guild-demo",
         session_service=session_service,
     )
 
     user_id = "demo_user"
     telemetry_id = f"act_{uuid.uuid4().hex[:12]}"
     session = await session_service.create_session(
-        app_name="agentic-marketing-demo",
+        app_name="hindsight-guild-demo",
         user_id=user_id,
         state={
             "telemetry_id": telemetry_id,
@@ -130,7 +130,7 @@ async def main():
 
     # Re-read final session state.
     final = await session_service.get_session(
-        app_name="agentic-marketing-demo", user_id=user_id, session_id=session.id,
+        app_name="hindsight-guild-demo", user_id=user_id, session_id=session.id,
     )
     state = final.state if final else {}
 

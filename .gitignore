@@ -90,18 +90,3 @@ drafts/media/
 # =============================================================================
 docs/DEMO_SCRIPT.md
 docs/DEVPOST.md
-
-# =============================================================================
-# Web frontend — TEMPORARILY excluded until final submission.
-# Everything goes public eventually; web/ is the deliberate last-moment check-in.
-# Repo root IS the project, so the path is `web/` (not `agentic-marketing/web`).
-#
-# ⚠️ AT SUBMISSION — to include the UI:
-#      1. DELETE the `web/` line below.
-#      2. git add web/ .gitignore && git commit -m "Add web UI" && git push
-#    A plain `git add web/` is SILENTLY IGNORED while the line below exists —
-#    do step 1 first, or you'll push an incomplete repo without noticing.
-#
-# (web/ is currently tracked; see notes below if you start a fresh-history repo.)
-# =============================================================================
-web/

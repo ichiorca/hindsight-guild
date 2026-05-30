@@ -1,0 +1,103 @@
+name: deploy
+
+# Manual, keyless deploy of the whole stack to Google Cloud.
+#
+# Auth is Workload Identity Federation (OIDC) — there is NO service-account
+# key stored in GitHub. The deploy identity, WIF pool/provider, Artifact
+# Registry repo, runtime service accounts, and Secret Manager values must all
+# exist first; see docs/DEPLOYMENT.md for the one-time pre-setup.
+#
+# Required GitHub repository VARIABLES (Settings → Secrets and variables →
+# Actions → Variables). None are secret — WIF means no keys:
+#   GCP_PROJECT_ID   e.g. hindsight-guild-prod
+#   GCP_REGION       e.g. us-central1   (optional; defaults to us-central1)
+#   GCP_WIF_PROVIDER projects/<NUM>/locations/global/workloadIdentityPools/<POOL>/providers/<PROVIDER>
+#   GCP_DEPLOY_SA    sa-deployer@<PROJECT_ID>.iam.gserviceaccount.com
+#   FIREBASE_PROJECT (optional; defaults to GCP_PROJECT_ID)
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_image_build:
+        description: "Skip the Cloud Build image step (redeploy existing images only)"
+        type: boolean
+        default: false
+
+# Don't let two deploys race the same project.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # required for Workload Identity Federation
+
+jobs:
+  deploy:
+    name: build + deploy to GCP
+    runs-on: ubuntu-latest
+    environment: production   # add required reviewers here to gate prod deploys
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      FIREBASE_PROJECT: ${{ vars.FIREBASE_PROJECT || vars.GCP_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required variables
+        run: |
+          : "${PROJECT_ID:?Set repo variable GCP_PROJECT_ID}"
+          test -n "${{ vars.GCP_WIF_PROVIDER }}" || { echo "Set repo variable GCP_WIF_PROVIDER"; exit 1; }
+          test -n "${{ vars.GCP_DEPLOY_SA }}"    || { echo "Set repo variable GCP_DEPLOY_SA"; exit 1; }
+          echo "Project=$PROJECT_ID Region=$REGION Firebase=$FIREBASE_PROJECT"
+
+      - name: Authenticate to Google Cloud (WIF, keyless)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set up Node (for the UI build + Firebase CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # 1. Build + push all container images via Cloud Build (cloudbuild.yaml).
+      - name: Build images (Cloud Build)
+        if: ${{ inputs.skip_image_build == false }}
+        run: bash deploy/01-build-images.sh
+
+      # 2. Cloud Run services (web-api + 13 A2A agents + HTTP handlers).
+      - name: Deploy services
+        run: bash deploy/02-deploy-services.sh
+
+      # 3. Cloud Run jobs (the cron workers).
+      - name: Deploy jobs
+        run: bash deploy/03-deploy-jobs.sh
+
+      # 4. Cloud Scheduler triggers for the jobs.
+      - name: Wire schedulers
+        run: bash deploy/04-schedulers.sh
+
+      # 5. Cross-service IAM (invoker + secretAccessor). Idempotent.
+      - name: Bind IAM
+        run: bash deploy/06-bind-iam.sh
+
+      # 6. Public website: build the SPA + deploy to Firebase Hosting.
+      #    Same-origin /api is rewritten to web-api (firebase.json), so there's
+      #    no API URL to bake. firebase-tools authenticates via the ADC that the
+      #    WIF step exported (GOOGLE_APPLICATION_CREDENTIALS).
+      - name: Deploy UI (Firebase Hosting)
+        run: bash deploy/05-deploy-ui.sh
+
+      - name: Summary
+        run: |
+          echo "### Deploy complete :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Project: \`$PROJECT_ID\` (\`$REGION\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- UI: https://${FIREBASE_PROJECT}.web.app" >> "$GITHUB_STEP_SUMMARY"
+          echo "- web-api: \`$(gcloud run services describe web-api --region=\"$REGION\" --format='value(status.url)' 2>/dev/null)\`" >> "$GITHUB_STEP_SUMMARY"

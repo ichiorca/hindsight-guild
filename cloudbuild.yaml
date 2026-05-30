@@ -3,21 +3,19 @@
 #
 # Triggered by deploy/01-build-images.sh, which runs:
 #   gcloud builds submit --config cloudbuild.yaml \
-#     --substitutions=_REGION=us-central1,_WEB_API_URL=<deployed-web-api-url>
+#     --substitutions=_REGION=us-central1
 #
-# All 17 builds run with waitFor: ['-'] so they fan out as soon as the
+# All 16 builds run with waitFor: ['-'] so they fan out as soon as the
 # build VM is up. On an E2_HIGHCPU_8 machine the whole pipeline takes
-# ~5-7 min vs ~25 min sequentially.
+# ~5-7 min vs ~25 min sequentially. (The UI is not built here — it's a
+# static Vite bundle served by Firebase Hosting; see firebase.json.)
 #
-# Artifact Registry repo `agentic-marketing` in $_REGION is created by
+# Artifact Registry repo `hindsight-guild` in $_REGION is created by
 # deploy/01-build-images.sh (gcloud is idempotent on `repositories create`).
 
 substitutions:
   _REGION: us-central1
-  _REPO: agentic-marketing
-  # The UI bakes VITE_API_URL into its JS bundle at build time. Override
-  # at submit time once the web-api service is deployed and its URL known.
-  _WEB_API_URL: /api
+  _REPO: hindsight-guild
 
 options:
   machineType: E2_HIGHCPU_8
@@ -160,23 +158,10 @@ steps:
            -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-api:$SHORT_SHA',
            -f, services/web_api/Dockerfile, .]
 
-  # -----------------------------------------------------------------------
-  # UI — Vite build + nginx static serve. VITE_API_URL baked at build time.
-  # Build context is web/ (smaller; node_modules excluded by .dockerignore).
-  # -----------------------------------------------------------------------
-  - id: ui
-    name: gcr.io/cloud-builders/docker
-    waitFor: ['-']
-    dir: web
-    args:
-      - build
-      - --build-arg
-      - VITE_API_URL=${_WEB_API_URL}
-      - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:latest
-      - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:$SHORT_SHA
-      - .
+  # NOTE: the UI is NOT a container. It's a static Vite build served by
+  # Firebase Hosting (see firebase.json + deploy/05-deploy-ui.sh). Firebase
+  # rewrites /api/** and /media/** to the web-api Cloud Run service, so the
+  # SPA is same-origin and there's nothing to build or bake here.
 
 # Every image listed here gets pushed once its build step succeeds. Cloud
 # Build's `images:` block parallelizes the pushes too.
@@ -213,5 +198,3 @@ images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substack-publisher:$SHORT_SHA
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-api:latest
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-api:$SHORT_SHA
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:latest
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/ui:$SHORT_SHA

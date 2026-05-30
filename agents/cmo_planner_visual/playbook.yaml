@@ -24,7 +24,7 @@ workflow:
     tool: mongodb_mcp
     method: find
     args:
-      database: agentic_marketing
+      database: hindsight_guild
       collection: experiments
       filter: {state: running}
 
@@ -32,7 +32,7 @@ workflow:
     tool: mongodb_mcp
     method: find
     args:
-      database: agentic_marketing
+      database: hindsight_guild
       collection: experiments
       filter: {state: decided}
       sort: [[decided_at, -1]]
@@ -57,7 +57,7 @@ workflow:
     tool: mongodb_mcp
     method: find
     args:
-      database: agentic_marketing
+      database: hindsight_guild
       collection: skills
       filter: {"self_critique_proposal.status": "awaiting_human_review"}
 

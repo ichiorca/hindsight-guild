@@ -35,7 +35,7 @@ def _bq_module():
         log.debug("google.cloud.bigquery not importable: %s", e)
         return None
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 BQ_DATASET = os.environ.get("BQ_DATASET", "telemetry")
 
 _bq: bigquery.Client | None = None

@@ -28,7 +28,7 @@ from shared.clients import secret_value
 
 log = logging.getLogger(__name__)
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 
 
 def _secret_optional(name: str) -> str | None:
@@ -86,7 +86,7 @@ class SubstackClient:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "agentic-marketing/0.2 (https://github.com/yours/auto-gtm)",
+            "User-Agent": "hindsight-guild/0.2 (https://github.com/yours/auto-gtm)",
         }
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))

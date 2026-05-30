@@ -420,7 +420,7 @@ python -m scripts.local_seed
 | Var                  | What it does                                                |
 |----------------------|-------------------------------------------------------------|
 | `MONGO_URI_DIRECT`   | Bypass Secret Manager, use this URI directly. Required.    |
-| `MONGO_DB`           | Database name (default: `agentic_marketing`).               |
+| `MONGO_DB`           | Database name (default: `hindsight_guild`).               |
 | `LOCAL_DEV`          | `1` = web_api skips BigQuery init; degrades to empty data.  |
 | `DRAFTING_FALLBACK`  | `synthetic` = `/api/draft` composes from Mongo when A2A is unreachable. |
 | `PROJECT_ID`         | Required by some modules at import time; any string works locally. |

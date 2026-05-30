@@ -12,7 +12,7 @@ Specific upstream skills adapted:
   - seo-content-brief / SKILL.md
 
 Copyright (c) 2026 AgriciDaniel — original claude-seo plugin.
-Copyright (c) 2026 auto-gtm / agentic-marketing — adaptations.
+Copyright (c) 2026 auto-gtm / hindsight-guild — adaptations.
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the

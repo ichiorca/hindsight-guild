@@ -25,7 +25,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 
 _URL_CACHE: dict[str, str] = {}
 _CARD_CACHE: dict[str, dict] = {}

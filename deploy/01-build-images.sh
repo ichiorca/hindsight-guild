@@ -17,7 +17,7 @@ echo "==> Ensuring Artifact Registry repo '${AR_REPO}' exists in ${REGION}"
 gcloud artifacts repositories create "$AR_REPO" \
   --repository-format=docker \
   --location="$REGION" \
-  --description="Container images for agentic-marketing" \
+  --description="Container images for hindsight-guild" \
   --project="$PROJECT_ID" 2>/dev/null || true
 
 echo "==> Submitting cloudbuild.yaml (17 images, parallel)"

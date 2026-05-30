@@ -14,7 +14,7 @@ from agents._factory import make_llm_agent
 from agents._prompts import ANALYTICS_INSTRUCTIONS
 from shared.bigquery_helper import bigquery_query
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 
 # Shared BQ helper — degrades to [] in LOCAL_DEV instead of raising.
 bigquery_query_tool = FunctionTool(func=bigquery_query)

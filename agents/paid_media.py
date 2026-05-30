@@ -46,7 +46,7 @@ _AGENT_NAME = "paid_media_agent"
 _DRAFTER_NAME = "paid_media_drafter"
 _ALLOWED_SKILLS = allowed_for(_AGENT_NAME)
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 
 # Shared helper degrades gracefully in LOCAL_DEV (returns [] instead of
 # raising). Previously the per-agent bigquery_query raised hard on

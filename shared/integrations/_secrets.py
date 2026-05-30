@@ -54,7 +54,7 @@ def _fetch_secret(secret_id: str) -> str:
     return instantly even when creds are absent in the cloud."""
     try:
         from google.cloud import secretmanager
-        project = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+        project = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
         client = secretmanager.SecretManagerServiceClient()
         name = f"projects/{project}/secrets/{secret_id}/versions/latest"
         return client.access_secret_version(name=name).payload.data.decode().strip()

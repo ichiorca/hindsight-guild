@@ -43,7 +43,7 @@ def _local_dev() -> bool:
 
 
 def _project_id() -> str:
-    return os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+    return os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 
 
 # ---------------------------------------------------------------------------

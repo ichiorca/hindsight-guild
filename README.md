@@ -64,67 +64,91 @@ SequentialAgent: Drafting pipeline (Tue)│
 ```
 
 Every agent is exposed via **A2A** (`to_a2a()`), so Cloud Run jobs and external
-callers invoke them as remote services — not Python imports.
+callers invoke them as remote services — not Python imports. The diagram shows
+the core weekly + drafting flow; the full guild also includes **Positioning**,
+**Paid Media**, **Lifecycle Email**, **Customer Voice**, **Ops/QA**, **AEO**
+(answer-engine optimization), and **ImageBrief** specialists, plus two
+cross-cutting loops:
+
+- **Signal-triggered drafting** — `signal_watcher` + `signal_router` turn
+  inbound signals into draft requests routed to the right channel agent.
+- **Closed-loop learning** — the drafting pipeline runs an inline
+  Critique→Revise step before review; nightly miners + the weekly
+  `self_critique` agent propose `SKILL.md` revisions that the
+  `promotion_gate` re-verifies and the founder approves to flip
+  `current_version`.
 
 ## Repo layout
 
 ```
-agentic-marketing/
-├── pyproject.toml                 # pinned deps incl. google-ads, a2a-sdk
-├── setup.sh                       # GCP + Atlas bootstrap (C0)
-├── cloudbuild.yaml                # parallel image builds (17 images)
-├── deploy/                        # phased deploy scripts — see deploy/README.md
-│   ├── all.sh                     # full deploy orchestrator
-│   ├── env.sh                     # shared SA/image/job/schedule maps
+hindsight-guild/
+├── pyproject.toml                 # pinned deps incl. ADK 1.x, a2a-sdk, google-ads
+├── setup.sh                       # GCP + APIs + Atlas + Firebase bootstrap (C0)
+├── LOCAL_DEV.md                   # run the whole stack locally (Mongo + synthetic fallbacks)
+├── docker-compose.yml             # local MongoDB
+├── cloudbuild.yaml                # parallel image builds (16 images)
+├── firebase.json / .firebaserc    # Firebase Hosting: SPA + /api,/media rewrites → web-api
+├── .github/workflows/
+│   ├── ci.yml                     # ruff + pytest(unit) + web build, on push/PR
+│   └── deploy.yml                 # manual, keyless (WIF) deploy of the whole stack
+├── deploy/                        # phased manual deploy scripts — see deploy/README.md
+│   ├── all.sh / env.sh            # orchestrator + shared SA/image/job/schedule maps
 │   ├── 01-build-images.sh         # cloudbuild.yaml submit
-│   ├── 02-deploy-services.sh      # 13 A2A + 4 HTTP services
+│   ├── 02-deploy-services.sh      # web-api + 13 A2A + HTTP handlers
 │   ├── 03-deploy-jobs.sh          # 11 Cloud Run jobs
 │   ├── 04-schedulers.sh           # 11 Cloud Scheduler triggers
-│   ├── 05-deploy-ui.sh            # UI rebuild + deploy
+│   ├── 05-deploy-ui.sh            # build SPA → Firebase Hosting
 │   └── 06-bind-iam.sh             # cross-service IAM
-├── sql/schema.sql                 # 3 BQ tables + 2 views (C1)
-├── mongo/seed.py                  # 6 Mongo collections + vector index (C2)
+├── docs/
+│   ├── DEPLOYMENT.md              # one-time pre-setup checklist + deploy guide
+│   └── prds/                      # product specs (AEO, signal-drafting, closed-loop)
+├── sql/schema.sql                 # 3 BQ tables + 3 views (C1)
+├── mongo/
+│   ├── schema.py                  # 15 canonical collections + history.* + derived.* + vector index
+│   ├── seed.py                    # back-compat shim → `python -m mongo.schema apply`
+│   ├── mcp_server.py              # MongoDB MCP server launcher (RO/RW)
+│   └── history.py / queries.py    # provenance + pre-image capture; query helpers
 ├── shared/
 │   ├── telemetry.py               # BQ emitter + Pydantic schemas
 │   ├── rubrics.py                 # Vertex AI Eval Service, all 6 rubrics
 │   ├── mongo_tools.py             # pymongo helpers (RO/RW secret routing)
-│   ├── allocator.py               # weighted-random, Vizier-swap-ready
-│   └── memory.py                  # VertexAiMemoryBankService (ADK)
+│   ├── clients.py                 # lazy BQ/secret clients (LOCAL_DEV fallbacks)
+│   ├── skills.py                  # skill registry + read_skill tools + on-disk reconcile
+│   ├── memory.py                  # VertexAiMemoryBankService (ADK)
+│   ├── allocator.py / provenance.py / bigquery_helper.py / imagen.py
+│   └── integrations/              # GA4 / HubSpot / Google Ads / LinkedIn clients
 ├── prompts/                       # versioned prompt templates per playbook
-├── tool_hub/MIGRATE.md            # Cloud API Registry intent doc
-├── agents/
-│   ├── _prompts.py                # system prompts; cross-agent state vars
-│   ├── _mcp.py                    # MongoDB MCPToolset factory (RO/RW)
-│   ├── _common.py                 # Model Armor + telemetry callbacks
-│   ├── research.py                # LlmAgent, output_key='research_findings'
-│   ├── content.py                 # LlmAgent reading {research_findings}
-│   ├── review.py                  # LlmAgent reading {draft}
-│   ├── analytics.py               # LlmAgent, used as tool by CMO
-│   ├── cmo_planner.py             # LlmAgent w/ AgentTool(research|analytics)
-│   ├── pipeline.py                # SequentialAgent(Research→Content→Review)
-│   ├── a2a_server.py              # to_a2a() exposure per agent
-│   ├── a2a_client.py              # call_agent() helper for workers
-│   └── cmo_planner_visual/        # Agent Designer YAML (demo-flair variant; intentionally not a Python package)
-├── services/
-│   ├── outcome_attach/            # GA4 + HubSpot + Google Ads + LinkedIn
-│   ├── drift_detect/              # 28d rubric drop → investigation exp
-│   ├── self_critique/             # Gemini playbook revisions weekly
-│   ├── eval_harness/              # NIGHTLY all-6-rubric re-grade
-│   ├── promotion_gate/            # WEEKLY skill promotion request engine
-│   ├── edit_capture_handler/      # Gemini-based edit classifier
+├── agents/                        # ADK agents — every one exposed via A2A (to_a2a)
+│   ├── pipeline.py                # SequentialAgent(Research→Content→Review→Critique→Revise)
+│   ├── research/content/review/analytics/cmo_planner.py  # core drafting + weekly CMO cycle
+│   ├── positioning/paid_media/lifecycle_email/customer_voice/ops_qa/image_brief/aeo_agent.py
+│   ├── signal_router.py / signal_watcher.py              # signal-triggered drafting
+│   ├── self_critique.py / self_critique_runner.py / _miners/   # closed-loop learning
+│   ├── critique.py / reviser.py / finalizer.py           # inline critique → revise loop
+│   ├── a2a_server.py / a2a_client.py                     # A2A exposure + worker client
+│   ├── _factory.py _models.py _prompts.py _mcp.py _mongodb_tools.py _skills_config.py _schema_constants.py
+│   └── cmo_planner_visual/        # Agent Designer YAML (demo variant; not a Python package)
+├── services/                      # Cloud Run jobs + HTTP services
+│   ├── web_api/                   # FastAPI — the UI's /api backend (public)
+│   ├── outcome_attach/            # GA4 + HubSpot + Google Ads + LinkedIn attribution
+│   ├── eval_harness/              # nightly all-6-rubric re-grade
+│   ├── derive_track_records/ drift_detect/              # rubric rollups + 28d drift → exp
+│   ├── self_critique/ promotion_gate/ positioning_review/   # weekly learning + gates
+│   ├── paid_media_sweep/ ops_qa_sweep/ snapshot_mongo/
+│   ├── substack_publisher/ substack_publish_sweep/      # publishing + stuck-publish retry
+│   ├── edit_capture_handler/      # Gemini edit classifier (approval Sheet → handler)
 │   └── slack_approval_handler/
-├── apps_script/Code.gs            # Sheet → handler sync
+├── skills/                        # versioned SKILL.md playbooks (house-style, aeo, …)
+├── web/                           # React + Vite SPA — the public website (Firebase Hosting)
+│   ├── src/                       # routes, components, lib/api.ts (same-origin /api)
+│   └── package.json               # build → dist/
+├── apps_script/Code.gs            # approval Sheet → edit-capture-handler sync
 ├── scripts/
-│   ├── create_agent_identity.sh
-│   ├── create_model_armor_template.sh   # floor settings + template
-│   └── create_mongo_users.sh            # RO + writer Atlas users
+│   ├── create_agent_identity.sh / create_mongo_users.sh / create_model_armor_template.sh
+│   └── setup_github_wif.sh        # one-time Workload Identity Federation for CI deploy
 ├── dashboards/README.md           # Looker Studio build steps
-├── demo/
-│   ├── seed_demo.py               # 30-day synthetic state
-│   ├── run_pipeline.py            # invoke Research→Content→Review
-│   ├── run_cmo_planner.py         # invoke the CMO Planner
-│   └── run_research.py            # Model Armor demo runner
-└── tests/{unit,integration}/
+├── demo/                          # seed_demo + run_pipeline / run_cmo_planner / run_research
+└── tests/{unit,integration,e2e}/
 ```
 
 ## What's different from the initial cut
@@ -146,17 +170,27 @@ Everything below was either weak or stubbed in the first pass; now real:
 
 ## Run order
 
-```bash
-cd agentic-marketing
-export PROJECT_ID=agentic-marketing-mvp REGION=us-central1 BILLING_ACCOUNT=<id>
+> **Deploying to GCP via CI?** See **`docs/DEPLOYMENT.md`** for the recommended
+> path: a one-time pre-setup checklist, then a manual, keyless GitHub Actions
+> deploy (`.github/workflows/deploy.yml`, Workload Identity Federation) that
+> runs all of the below for you and publishes the UI to Firebase Hosting. The
+> manual scripts here remain the source of truth that workflow orchestrates.
+>
+> To run the whole thing **locally** (Dockerized Mongo + synthetic fallbacks,
+> no cloud creds), see **`LOCAL_DEV.md`**.
 
-./setup.sh                                # GCP project, APIs, Atlas M0, secrets
+```bash
+cd hindsight-guild
+export PROJECT_ID=hindsight-guild-mvp REGION=us-central1 BILLING_ACCOUNT=<id>
+
+./setup.sh                                # GCP project, APIs (incl. Firebase), Atlas M0, secrets
 ./scripts/create_mongo_users.sh           # RO + writer Atlas users → Secret Manager
 ./scripts/create_agent_identity.sh        # sa-agents + sa-scheduler
 ./scripts/create_model_armor_template.sh  # floor + template + binding
 python mongo/seed.py                      # collections + vector index
 
-./deploy/all.sh                           # 17 images, 17 services, 11 jobs, 11 schedulers, IAM
+./deploy/all.sh                           # 16 images, 17 services, 11 jobs, 11 schedulers,
+                                          # IAM, + UI → Firebase Hosting
                                           # (see deploy/README.md for per-phase control)
 
 # Find the Agent Engine ID (created via `adk deploy` or Agent Engine console),
@@ -174,6 +208,8 @@ export AGENT_ENGINE_ID=<id>
 #   - Populate slack_webhook_url secret (until then, slack_approval logs
 #     'webhook_unconfigured' and returns successfully without notifying).
 #   - Build Looker dashboard per dashboards/README.md
+#   - Open the public site: https://<PROJECT_ID>.web.app (Firebase Hosting).
+#     Add a custom domain later in the Firebase console → Hosting.
 
 python demo/seed_demo.py                  # 30 days of state, run 60+ min before demo
 
@@ -188,14 +224,18 @@ python demo/run_cmo_planner.py
 
 ```bash
 pip install -e ".[dev]"
+ruff check .                      # lint (also the CI gate)
 pytest tests/unit -q              # mocked; no cloud creds needed
 INTEGRATION_TEST=1 pytest tests/integration -q   # against live cloud
+python -m tests.e2e.e2e_smoke     # end-to-end drivers (need a running stack; see tests/e2e/)
 ```
 
-The headline test is `tests/integration/test_reject_then_redraft.py`: inject a
-fresh negative, re-score similar drafts, confirm the rubric grounding picks up
-the new negative and lowers scores on like patterns. The A2A handshake test
-verifies cross-agent calls work over the protocol.
+The headline integration test is `tests/integration/test_reject_then_redraft.py`:
+inject a fresh negative, re-score similar drafts, confirm the rubric grounding
+picks up the new negative and lowers scores on like patterns. The A2A handshake
+test verifies cross-agent calls work over the protocol. `tests/e2e/` holds
+full-loop drivers (smoke, agent handoffs, PRD features, memory tiers,
+skill-evolution) that exercise the live API + agents.
 
 ## Conventions
 
@@ -205,7 +245,8 @@ verifies cross-agent calls work over the protocol.
 - **Mongo access:** Content + Review use `mongo_uri_readonly`; Research, CMO, workers use `mongo_uri_writer`. Atlas enforces server-side.
 - **Telemetry:** Every agent emits one row to `telemetry.actions` via `after_agent_callback`. Outcome slots created at the same time, filled async by `services/outcome_attach`.
 - **Eval:** All 6 rubrics live, inline at draft time (Eval Service) + nightly re-grade by `eval_harness`.
-- **Cost cap:** $1k/mo. See cost model in `agentic_marketing_technical_spec_lean.md` §7.
+- **Cost cap:** ~$1k/mo at solo-founder scale (Cloud Run scales to zero, Atlas
+  M0 free tier; spend is mostly Cloud Build minutes + Vertex AI tokens).
 
 ## Caveats — read before deploying
 

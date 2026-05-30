@@ -919,7 +919,7 @@ JSON envelope.  Required fields:
 The full insert call looks like:
 
   mongodb.insert-one(
-    database="agentic_marketing",
+    database="hindsight_guild",
     collection="{Coll.EXPERIMENTS}",
     document={{ ... the doc above ... }}
   )

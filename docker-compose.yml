@@ -9,12 +9,12 @@
 #
 # Connection string for everything in this stack:
 #   mongodb://localhost:27017
-# Database: agentic_marketing (overridable via MONGO_DB env).
+# Database: hindsight_guild (overridable via MONGO_DB env).
 
 services:
   mongo:
     image: mongo:7
-    container_name: agentic-marketing-mongo
+    container_name: hindsight-guild-mongo
     restart: unless-stopped
     ports:
       - "27017:27017"

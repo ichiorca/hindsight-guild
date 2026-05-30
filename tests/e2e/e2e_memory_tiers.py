@@ -25,7 +25,7 @@ This test:
       a functional-phase failure. Lets you ship this as a regression
       baseline that improves over time.
 
-Usage (from agentic-marketing/, with Docker Mongo up + scripts.local_seed run):
+Usage (from hindsight-guild/, with Docker Mongo up + scripts.local_seed run):
 
     python -m tests.e2e.e2e_memory_tiers              # run all 7 phases
     python -m tests.e2e.e2e_memory_tiers --phases 1,2 # subset

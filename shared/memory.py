@@ -25,9 +25,9 @@ from google.adk.memory import VertexAiMemoryBankService
 
 log = logging.getLogger(__name__)
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "agentic-marketing-mvp")
+PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 LOCATION = os.environ.get("REGION", "us-central1")
-APP_NAME = os.environ.get("AGENT_APP_NAME", "agentic-marketing")
+APP_NAME = os.environ.get("AGENT_APP_NAME", "hindsight-guild")
 
 # Agent Engine ID is the trailing segment of the agent engine resource name,
 # e.g. projects/123/locations/us-central1/reasoningEngines/4567890 → "4567890".

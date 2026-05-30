@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-: "${PROJECT_ID:?must set PROJECT_ID (e.g. export PROJECT_ID=agentic-marketing-mvp)}"
+: "${PROJECT_ID:?must set PROJECT_ID (e.g. export PROJECT_ID=hindsight-guild-mvp)}"
 REGION="${REGION:-us-central1}"
 
 # Service accounts (created by scripts/create_agent_identity.sh).
@@ -19,7 +19,7 @@ SA="sa-agents@${PROJECT_ID}.iam.gserviceaccount.com"
 SCHED_SA="sa-scheduler@${PROJECT_ID}.iam.gserviceaccount.com"
 
 # Artifact Registry layout.
-AR_REPO="agentic-marketing"
+AR_REPO="hindsight-guild"
 AR_HOST="${REGION}-docker.pkg.dev"
 AR_PREFIX="${AR_HOST}/${PROJECT_ID}/${AR_REPO}"
 

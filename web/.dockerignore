@@ -1,0 +1,14 @@
+# Docker build context for the UI image. The Dockerfile runs `npm ci`
+# inside the container, so we don't need to ship the host's node_modules.
+node_modules
+dist
+test-results
+playwright-report
+
+# Dev/IDE noise
+.idea
+.vscode
+.DS_Store
+
+# Tests aren't needed at runtime
+tests

@@ -202,7 +202,7 @@ def main():
                         "real pipeline runs.")
     args = p.parse_args()
 
-    db_name = os.environ.get("MONGO_DB", "agentic_marketing")
+    db_name = os.environ.get("MONGO_DB", "hindsight_guild")
     mode = "DEMO (mock data)" if args.with_demo else "CLEAN (reference only)"
     print(f"==> Seeding local Mongo at {os.environ['MONGO_URI_DIRECT']} "
           f"db={db_name} [{mode}]")

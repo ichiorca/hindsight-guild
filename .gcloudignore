@@ -25,11 +25,9 @@ venv/
 dist/
 build/
 
-# Frontend
-web/node_modules/
-web/dist/
-web/test-results/
-web/playwright-report/
+# Frontend — the UI is built locally / in CI and shipped to Firebase Hosting,
+# not built in Cloud Build, so none of web/ needs to ship in the build upload.
+web/
 
 # Dev-only
 tests/
@@ -52,7 +50,7 @@ service-account-*.json
 .DS_Store
 
 # Top-level spec docs — not needed at build time
-agentic_marketing_*.md
+hindsight_guild_*.md
 
 # The deploy/ tree drives Cloud Build but doesn't need to ship inside the
 # build context.

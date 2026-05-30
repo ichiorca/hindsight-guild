@@ -98,7 +98,7 @@ Two operational requirements with concrete enforcement surfaces:
 
 1. **Merchant Center — AI-generated product images:** must carry IPTC
    `DigitalSourceType: TrainedAlgorithmicMedia` metadata. Out of scope for
-   marketing drafting; called out here because the same agentic-marketing
+   marketing drafting; called out here because the same hindsight-guild
    system may publish product surfaces later.
 2. **AI-generated product titles and descriptions:** must be separately
    specified and labeled as AI-generated in the merchant feed. Same scope
