@@ -251,7 +251,13 @@ def score_draft(candidate: str, channel: str | None = None,
     """
     rubrics = rubrics or ALL_RUBRICS
 
-    row = {"candidate": candidate}
+    # Vertex's PointwiseMetricPromptTemplate always renders a "## Response\n
+    # {response}" section, so EvalTask REQUIRES a `response` column even when
+    # our criteria reference {candidate}. Without it every metric fails with
+    # "Cannot find the `response` column ..." and the draft gets NO eval_scores
+    # (which starves rubric-trend + the promotion gate). The candidate IS the
+    # response under evaluation, so mirror it into `response`.
+    row = {"candidate": candidate, "response": candidate}
     if channel:
         row["channel"] = channel
     if icp_description:
