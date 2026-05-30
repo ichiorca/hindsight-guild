@@ -54,11 +54,15 @@ def get_queue(channel: str | None = None, limit: int = 50):
     Pulls drafting-class actions from the last 7 days that don't yet have
     an approval record. The UI shows the queue grouped by channel.
 
-    Source: BigQuery in production, Mongo (`actions` collection populated
-    by shared/telemetry.py's dual-write) in LOCAL_DEV.
+    Source: Mongo (`actions`, populated by shared/telemetry.py's dual-write)
+    is the operational store and the default read path — it's where the
+    pipeline's after-callbacks reliably land every draft. BigQuery is wired
+    for future GA4/analytics work but is read here only when explicitly
+    opted in via QUEUE_USE_BQ=1 (and a client is available), so the inbox
+    never goes empty just because the BQ streaming path is unpopulated.
     """
     from services.web_api.main import BQ, PROJECT_ID, bigquery
-    if BQ is None:
+    if BQ is None or os.environ.get("QUEUE_USE_BQ", "").lower() not in ("1", "true", "yes"):
         return _queue_from_mongo(channel=channel, limit=limit)
     chan_filter = "AND channel = @ch" if channel else ""
     sql = f"""
@@ -197,11 +201,13 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
         items.append(QueueItem(
             telemetry_id=r["telemetry_id"],
             ts=r["ts"].isoformat() if hasattr(r.get("ts"), "isoformat") else str(r.get("ts")),
-            agent=r.get("agent", ""),
+            agent=r.get("agent") or "",
             channel=r.get("channel"),
-            skill_id=r.get("skill_id", ""),
-            skill_version=r.get("skill_version", ""),
-            draft_text=draft_text,
+            # `or ""` (not a .get default): these land as explicit None on
+            # real pipeline rows, which would 500 the required-str fields.
+            skill_id=r.get("skill_id") or "",
+            skill_version=r.get("skill_version") or "",
+            draft_text=draft_text or "",
             eval_scores={k: v for k, v in eval_scores.items() if v is not None},
             review_flags=raw.get("review_flags") or [],
             customer_voice_used=raw.get("customer_voice_used") or [],
