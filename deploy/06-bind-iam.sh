@@ -59,8 +59,8 @@ bind_secret_accessor() {
 
 echo "==> 1. sa-agents → run.invoker on every A2A service"
 for name in "${!A2A_APPS[@]}"; do
-  echo "  -> a2a-${name}"
-  bind_run_invoker "a2a-${name}" "$SA"
+  echo "  -> a2a-${name//_/-}"
+  bind_run_invoker "a2a-${name//_/-}" "$SA"
 done
 
 echo "==> 2. sa-agents → run.invoker on substack-publisher"

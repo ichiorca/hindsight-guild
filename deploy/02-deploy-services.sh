@@ -19,8 +19,8 @@ source "$(dirname "$0")/env.sh"
 echo "==> Deploying ${#A2A_APPS[@]} A2A agent services from agent-base:latest"
 for name in "${!A2A_APPS[@]}"; do
   app_attr="${A2A_APPS[$name]}"
-  echo "  -> a2a-${name}  (agents.a2a_server:${app_attr})"
-  gcloud run deploy "a2a-${name}" \
+  echo "  -> a2a-${name//_/-}  (agents.a2a_server:${app_attr})"
+  gcloud run deploy "a2a-${name//_/-}" \
     --image="$(image_ref agent-base)" \
     --command="uvicorn" \
     --args="agents.a2a_server:${app_attr},--host,0.0.0.0,--port,8080" \
@@ -36,7 +36,7 @@ done
 # clients) can resolve `a2a_url_<name>` at runtime instead of hardcoding.
 echo "==> Persisting A2A URLs to Secret Manager"
 for name in "${!A2A_APPS[@]}"; do
-  url=$(gcloud run services describe "a2a-${name}" \
+  url=$(gcloud run services describe "a2a-${name//_/-}" \
     --region="$REGION" --project="$PROJECT_ID" \
     --format='value(status.url)')
   secret_name="a2a_url_${name}"
