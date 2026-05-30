@@ -64,13 +64,22 @@ CHANNEL DEFAULT when visual_pref is "auto" or empty:
 
 STEP 3 — produce each visual:
   DIAGRAM (infographic/excalidraw):
-    - Write VALID Mermaid (`flowchart LR` or `flowchart TD`). Node labels MUST
-      be the draft's SPECIFIC concepts — never lorem-ipsum/generic. Keep it
-      readable: <= 8 nodes, short labels. Example:
-        flowchart LR
-          A[Manual lead routing] --> B{Agent triage}
-          B --> C[Faster SLAs]
-          B --> D[Cleaner CRM data]
+    - Write VALID, SIMPLE Mermaid (`flowchart LR` or `flowchart TD` only).
+    - CRITICAL syntax rules (broken Mermaid renders nothing):
+      * ALWAYS wrap node labels in DOUBLE QUOTES: A["Level 3: Orchestration"].
+        Quoting is REQUIRED whenever a label contains punctuation — parentheses
+        (), colons :, commas, slashes, etc. Unquoted punctuation breaks the
+        parser.
+      * Do NOT use <br/>, HTML, subgraphs, or markdown in labels. Keep each
+        label one short line (<= ~40 chars).
+      * Node ids are bare letters/words (A, B, Foundation); labels go in the
+        quoted brackets.
+    - Node labels MUST be the draft's SPECIFIC concepts — never generic. Keep it
+      readable: <= 8 nodes. Example:
+        flowchart TD
+          A["Individual productivity"] --> B["Workflow automation"]
+          B --> C["Systemic orchestration"]
+          F["Data governance + integration"] --> A
     - Call diagram_generate(telemetry_id, mermaid, look, alt_text).
   CONTEXTUAL image:
     - Write a SPECIFIC Imagen prompt (a concrete metaphor, no "business

@@ -104,11 +104,13 @@ function ImageBlock({
       style={{ aspectRatio: aspect }}
     >
       <span className="text-[11px] uppercase tracking-wider text-warning font-semibold mb-1">
-        Image pending
+        {image.kind === "infographic" || image.kind === "excalidraw" ? "Diagram pending" : "Image pending"}
       </span>
       <p className="text-xs italic max-w-xs">"{image.alt_text}"</p>
       <p className="text-[10px] text-muted-foreground mt-1.5">
-        Imagen unavailable · founder uploads on publish
+        {image.kind === "infographic" || image.kind === "excalidraw"
+          ? "Diagram render failed · founder uploads on publish"
+          : "Image generation failed · founder uploads on publish"}
       </p>
     </div>
   );
