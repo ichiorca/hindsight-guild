@@ -696,13 +696,21 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
                 if isinstance(p, dict) and p.get("text")]
 
     candidates: list[str] = []
+    agent_texts: list[str] = []                                     # excludes role=user
     candidates += _texts_from_parts(result.get("parts"))            # bare Message reply
+    agent_texts += _texts_from_parts(result.get("parts"))
     for msg in (result.get("history") or result.get("messages") or []):
-        candidates += _texts_from_parts(msg.get("parts"))
+        parts_texts = _texts_from_parts(msg.get("parts"))
+        candidates += parts_texts
+        if msg.get("role") != "user":
+            agent_texts += parts_texts
     for art in result.get("artifacts") or []:
-        candidates += _texts_from_parts(art.get("parts"))
+        art_texts = _texts_from_parts(art.get("parts"))
+        candidates += art_texts
+        agent_texts += art_texts
     status_msg = (result.get("status") or {}).get("message") or {}
     candidates += _texts_from_parts(status_msg.get("parts"))
+    agent_texts += _texts_from_parts(status_msg.get("parts"))
 
     # Walk newest-to-oldest so the Finalizer's output (last) wins.
     for text in reversed(candidates):
@@ -727,11 +735,12 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
 
     # Single-agent handoffs (agent_id != pipeline) have NO Finalizer envelope,
     # so `final` stays empty and draft_text is "". Fall back to the agent's
-    # raw text output — the longest candidate that isn't the finalizer JSON —
-    # so per-agent runs surface their result instead of an empty card.
-    if not draft_text and candidates:
-        non_json = [c for c in candidates if not isinstance(_try_parse_json(c), dict)]
-        pool = non_json or candidates
+    # raw text output — the longest AGENT-role candidate that isn't the
+    # finalizer JSON — so per-agent runs surface their result. Use agent_texts
+    # (not candidates) so we never echo the user's prompt back as the "draft".
+    if not draft_text and agent_texts:
+        non_json = [c for c in agent_texts if not isinstance(_try_parse_json(c), dict)]
+        pool = non_json or agent_texts
         draft_text = max(pool, key=len)
 
     # The image_brief agent emits its result as JSON TEXT, so state["image"]

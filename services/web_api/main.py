@@ -126,6 +126,7 @@ def _secret_optional(name: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 from services.web_api.routers import (  # noqa: E402
+    admin,
     agents,
     capabilities,
     drafting,
@@ -143,6 +144,7 @@ from services.web_api.routers import (  # noqa: E402
 )
 
 app.include_router(health.router)
+app.include_router(admin.router)
 app.include_router(queue.router)
 app.include_router(integrations.router)
 app.include_router(experiments.router)

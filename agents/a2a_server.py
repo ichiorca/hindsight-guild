@@ -30,11 +30,30 @@ from agents.image_brief import image_brief_agent
 from agents.lifecycle_email import lifecycle_email_agent
 from agents.ops_qa import ops_qa_agent
 from agents.paid_media import paid_media_agent
-from agents.pipeline import drafting_pipeline
+from agents.pipeline import _ensure_session_state, drafting_pipeline
 from agents.positioning import positioning_agent
 from agents.research import research_agent
 from agents.review import review_agent
 from agents.self_critique import self_critique_agent
+
+# Per-agent handoffs (Agents-page quick-handoff, /api/draft?agent=...) serve a
+# SINGLE agent over A2A. Outside the pipeline that agent runs with an empty
+# session state, so its instruction template fails on {channel} /
+# {topic_hint} / {icp_segment} / {playbook_body} and the handoff returns no
+# draft. Attach the pipeline's state-seeder as each agent's before-callback so
+# a standalone run extracts those from the user message first.
+#
+# We ASSIGN the callback rather than wrapping in a SequentialAgent: the
+# pipeline already owns research/content/review/image_brief as sub-agents and
+# an ADK agent can't have two parents (wrapping raises). ``_ensure_session_state``
+# is idempotent, so it's harmless when these agents also run inside the
+# pipeline (where the SequentialAgent's own before-callback already ran).
+for _agent in (
+    research_agent, content_agent, review_agent, analytics_agent, cmo_planner,
+    positioning_agent, customer_voice_agent, lifecycle_email_agent,
+    paid_media_agent, ops_qa_agent, self_critique_agent, image_brief_agent,
+):
+    _agent.before_agent_callback = _ensure_session_state
 
 # Drafting team
 research_a2a   = to_a2a(research_agent, port=8001)
