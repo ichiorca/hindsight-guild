@@ -153,9 +153,17 @@ def _inject_aeo_into_eval_scores(telemetry_id: str, score: float) -> None:
     """
     try:
         db = mongo_tools.db()
+        # Pipeline update so a NULL eval_scores (now common — eval scoring is
+        # sampled via EVAL_SAMPLE_RATE, so most rows have eval_scores=null) is
+        # turned into {} before adding answer_extractability. A plain
+        # `$set: {"eval_scores.answer_extractability": ...}` fails on a null
+        # parent with "Cannot create field ... in element {eval_scores: null}".
         db["actions"].update_many(
             {"telemetry_id": telemetry_id},
-            {"$set": {"eval_scores.answer_extractability": float(score)}},
+            [{"$set": {"eval_scores": {"$mergeObjects": [
+                {"$ifNull": ["$eval_scores", {}]},
+                {"answer_extractability": float(score)},
+            ]}}}],
         )
     except Exception as e:
         # Telemetry must NEVER block the agent run.

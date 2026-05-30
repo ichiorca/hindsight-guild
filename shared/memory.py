@@ -1,109 +1,78 @@
-"""Vertex AI Memory Bank integration for the agent team.
+"""Agent memory — institutional lessons stored in MongoDB.
 
-Uses the real google.adk.memory.VertexAiMemoryBankService — verified against
-ADK docs: https://adk.dev/sessions/memory/
+Replaces the Vertex AI Memory Bank (no AGENT_ENGINE_ID / Agent Engine needed).
+The Finalizer writes a one-sentence "what worked for this ICP" lesson after
+each draft (``remember_lesson``); the Research agent recalls recent lessons for
+the same scope before drafting (``recall``). Lessons live in the Mongo
+collection ``agent_lessons``.
 
-Memory Bank extracts facts/preferences asynchronously from completed sessions
-and lets agents recall them across conversations. We use it as the substrate
-for cross-channel transfer and institutional continuity. Pricing as of Jan 28,
-2026: $0.25 per 1,000 events or memories stored.
-
-Memory scopes used in this build (encoded as user_id namespaces because the
-Memory Bank service keys by (app_name, user_id)):
+Scopes (the ``scope`` string namespace):
   - icp_segment:<id>   — what worked for whom
   - channel:<name>     — what worked where
   - campaign:<id>      — per-campaign history
   - skill:<id>         — playbook track-record narrative
+
+Both functions are best-effort: memory must never fail a pipeline run.
 """
 from __future__ import annotations
 
 import logging
-import os
-from functools import lru_cache
-
-from google.adk.memory import VertexAiMemoryBankService
+from datetime import UTC, datetime
 
 log = logging.getLogger(__name__)
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
-LOCATION = os.environ.get("REGION", "us-central1")
-APP_NAME = os.environ.get("AGENT_APP_NAME", "hindsight-guild")
-
-# Agent Engine ID is the trailing segment of the agent engine resource name,
-# e.g. projects/123/locations/us-central1/reasoningEngines/4567890 → "4567890".
-# Populated by setup.sh into Secret Manager / env after the agent engine is
-# created.
-AGENT_ENGINE_ID = os.environ.get("AGENT_ENGINE_ID", "")
-
-
-@lru_cache(maxsize=1)
-def memory_service() -> VertexAiMemoryBankService:
-    if not AGENT_ENGINE_ID:
-        raise RuntimeError(
-            "AGENT_ENGINE_ID env var not set. Run `gcloud ai reasoning-engines "
-            "list` to find it after the Agent Engine is created, then export "
-            "it into the agent's runtime."
-        )
-    return VertexAiMemoryBankService(
-        project=PROJECT_ID,
-        location=LOCATION,
-        agent_engine_id=AGENT_ENGINE_ID,
-    )
+_COLL = "agent_lessons"
 
 
 async def remember_lesson(scope: str, lesson: str,
                            metadata: dict | None = None) -> None:
-    """Persist a one-sentence lesson under a scoped key (e.g. campaign:<id>).
+    """Persist a one-sentence lesson under a scoped key. Never raises."""
+    if not scope or not lesson:
+        return
+    try:
+        from shared import mongo_tools
+        mongo_tools.db()[_COLL].insert_one({
+            "scope": scope,
+            "lesson": lesson,
+            "metadata": metadata or {},
+            "ts": datetime.now(UTC),
+        })
+    except Exception as e:  # noqa: BLE001 — memory writes must not block a run
+        log.warning("remember_lesson (mongo) failed for %s: %s", scope, e)
 
-    Wraps the lesson into a one-event session for Memory Bank to extract.
-    Memory extraction runs asynchronously on the service side; expect a few
-    seconds of latency before the memory is queryable.
+
+async def recall(scope: str, query: str = "", top_k: int = 5) -> list[dict]:
+    """Return lessons for a scope as ``[{content, score}]``.
+
+    Pulls the most recent lessons for the scope; when ``query`` is given,
+    lessons sharing keywords with it rank first (a cheap relevance nudge over
+    pure recency). No vector index required — recent-per-scope is enough for
+    cross-draft continuity, and the Research agent only needs a handful.
     """
-    from google.adk.sessions import InMemorySessionService
+    try:
+        from shared import mongo_tools
+        rows = list(
+            mongo_tools.db()[_COLL]
+            .find({"scope": scope})
+            .sort("ts", -1)
+            .limit(max(int(top_k or 5) * 3, 15))
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("recall (mongo) failed for %s: %s", scope, e)
+        return []
 
-    sess = InMemorySessionService()
-    session = await sess.create_session(
-        app_name=APP_NAME, user_id=scope,
-        state={"lesson": lesson, "metadata": metadata or {}},
-    )
-    # Append a single event so Memory Bank has something to extract from
-    await sess.append_event(session, _LessonEvent(lesson))
-    completed = await sess.get_session(
-        app_name=APP_NAME, user_id=scope, session_id=session.id
-    )
-    await memory_service().add_session_to_memory(completed)
+    terms = {t for t in (query or "").lower().split() if len(t) > 3}
 
+    def _kw_score(text: str) -> float:
+        if not terms:
+            return 0.0
+        low = text.lower()
+        return float(sum(1 for t in terms if t in low))
 
-async def recall(scope: str, query: str, top_k: int = 5) -> list[dict]:
-    """Semantic search Memory Bank for a scope. Returns list of {content, score}."""
-    results = await memory_service().search_memory(
-        app_name=APP_NAME, user_id=scope, query=query
-    )
-    return [{"content": m.content, "score": getattr(m, "score", None)}
-            for m in results.memories[:top_k]]
-
-
-class _LessonEvent:
-    """Minimal event shape Memory Bank expects when adding a session.
-
-    Recent ADK versions reach for ``event.partial`` during session
-    persistence, so we expose that attribute too (False = full event,
-    not a streamed chunk). Without it, ``add_session_to_memory`` raises
-    ``AttributeError: '_LessonEvent' object has no attribute 'partial'``
-    on every Finalizer run — non-blocking but noisy.
-    """
-
-    def __init__(self, lesson: str):
-        from google.genai.types import Content, Part
-        # Part.from_text() switched from positional to kw-only in newer
-        # google.genai builds (>=1.x). Use the kw form — the old
-        # positional call now raises TypeError.
-        self.content = Content(parts=[Part.from_text(text=lesson)], role="user")
-        self.author = "system"
-        self.invocation_id = "lesson_event"
-        # ADK ≥1.x checks `event.partial` during memory persistence.
-        self.partial = False
-        # Defensive: other attributes ADK occasionally introspects.
-        self.actions = None
-        self.error_code = None
-        self.error_message = None
+    scored = [
+        {"content": r.get("lesson", ""), "score": _kw_score(r.get("lesson", ""))}
+        for r in rows
+    ]
+    # Stable sort by keyword score keeps recency order within equal scores.
+    scored.sort(key=lambda d: d["score"], reverse=True)
+    return scored[: int(top_k or 5)]
