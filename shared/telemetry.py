@@ -183,6 +183,15 @@ def emit_action(record: TelemetryRecord, outcomes: list[OutcomeSlot] | None = No
         actions_table = f"{PROJECT_ID}.{BQ_DATASET}.actions"
         try:
             row = json.loads(record.model_dump_json())
+            # The actions table's eval_scores/edit_summary/model_armor/raw
+            # columns are BigQuery JSON type. The streaming insert API
+            # (insert_rows_json → tabledata.insertAll) requires JSON columns
+            # to be JSON-ENCODED STRINGS, not nested objects — a dict is
+            # rejected per-row with "This field: <col> is not a record." and
+            # the whole row is dropped. Serialize them so the write lands.
+            for json_col in ("eval_scores", "edit_summary", "model_armor", "raw"):
+                if row.get(json_col) is not None:
+                    row[json_col] = json.dumps(row[json_col])
             errors = bq.insert_rows_json(actions_table, [row])
             if errors:
                 log.warning("BQ insert failed for telemetry.actions: %s", errors)
