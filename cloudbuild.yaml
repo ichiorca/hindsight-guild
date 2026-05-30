@@ -18,12 +18,12 @@ substitutions:
   _REPO: hindsight-guild
 
 options:
-  machineType: E2_HIGHCPU_8
+  machineType: E2_HIGHCPU_32
   logging: CLOUD_LOGGING_ONLY
   dynamic_substitutions: true
 
 # 30 min cap for the whole fan-out. Individual builds are well under this.
-timeout: 1800s
+timeout: 3600s
 
 # Naming convention for every image:
 #   ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/<name>:latest
