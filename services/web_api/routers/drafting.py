@@ -752,7 +752,18 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
         parsed_img = _try_parse_json(image_val)
         image_val = parsed_img if isinstance(parsed_img, dict) else None
 
+    # Pass through any STRUCTURED keys the agent emitted that aren't part of
+    # the standard pipeline shape — e.g. a single-agent handoff's
+    # positioning_proposals, memo_markdown, paid_media_action, or an analytics
+    # snapshot ({shape, ...}). The standard keys below override, so the pipeline
+    # shape stays stable; this only ADDS the per-agent fields the UI's per-shape
+    # renderer (Drafting.tsx AgentResult) + e2e_handoffs look for.
+    _std = {"telemetry_id", "channel", "icp_segment", "draft", "subject",
+            "research_findings", "review", "image", "eval_scores", "synthetic"}
+    passthrough = {k: v for k, v in final.items() if k not in _std}
+
     return {
+        **passthrough,
         "synthetic": False,
         "telemetry_id": final.get("telemetry_id"),
         "channel": final.get("channel"),

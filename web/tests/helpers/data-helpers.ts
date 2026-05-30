@@ -41,7 +41,11 @@ export interface DraftOpts {
 export async function kickoffDraft(
   request: APIRequestContext,
   opts: DraftOpts = {},
-  maxWaitMs = 60_000,
+  // Synthetic-mode jobs finish in ~5s, but a REAL pipeline draft against the
+  // deployed app runs every LLM stage and takes ~120-180s. Default high so the
+  // same helper works against prod; local synthetic runs still return the
+  // instant the job is done, so the ceiling costs them nothing.
+  maxWaitMs = 220_000,
 ): Promise<Record<string, unknown>> {
   const payload = {
     icp_segment: opts.icp_segment ?? "seg_founder_b2b",
@@ -178,8 +182,11 @@ export async function getCount(
  */
 export async function waitUntil(
   check: () => Promise<boolean>,
-  timeoutMs = 8_000,
-  intervalMs = 300,
+  // Atlas (cloud Mongo) write→read propagation is slower than a local Mongo,
+  // so give post-action assertions (approval shrinks the queue, etc.) more
+  // headroom than the original local-only 8s.
+  timeoutMs = 20_000,
+  intervalMs = 400,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastErr: unknown = null;

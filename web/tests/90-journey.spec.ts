@@ -178,8 +178,15 @@ test("journey: capabilities heatmap reflects drafts in real time", async ({ page
   ).toBeVisible({ timeout: 5_000 });
 });
 
-test("journey: live ticker WS receives push when job is in flight", async ({ page, request }) => {
+test("journey: live ticker WS receives push when job is in flight", async ({ page, request, baseURL }) => {
   test.setTimeout(45_000);
+  // WS push only happens where the socket can connect (local dev). On the
+  // deployed Firebase origin the ticker polls /api/live/now instead — there is
+  // no WS to receive frames on, by design.
+  test.skip(
+    !baseURL?.includes("localhost") && !baseURL?.includes("127.0.0.1"),
+    "WS transport is local-only; the deployed ticker polls /api/live/now",
+  );
 
   // Open the queue page so the LiveTicker (mounted in Layout) opens
   // its WebSocket.

@@ -14,9 +14,12 @@ const BASE =
 
 export default defineConfig({
   testDir: "./tests",
-  // Prod drafts go through real LLM calls — generous budgets so slowness
-  // doesn't masquerade as a failure.
-  timeout: 150_000,
+  // Prod drafts go through real LLM calls (~120-180s each), so a test that
+  // fires one draft + asserts needs a generous ceiling or slowness reads as a
+  // failure. (Multi-draft seeding tests like 00-preflight fire 15 real drafts
+  // serially and are inherently slow against prod — they're synthetic-mode
+  // fixtures, not product assertions.)
+  timeout: 260_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,

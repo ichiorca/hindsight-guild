@@ -59,4 +59,21 @@ def admin_seed(x_admin_token: str | None = Header(default=None)) -> dict:
         log.exception("admin seed: cmd_load_all failed")
         out["seed_load_all"] = f"error: {e}"
 
+    # Agent skills (house-style, copywriting, ...) — NOT covered by
+    # cmd_load_all's playbook seed. UPSERT them into the skills collection so
+    # the agent_skill rows carry skill_kind/current_version/versions (the
+    # Skills page renders the kind chip + SKILL.md from these). Upsert, not
+    # wipe, so the playbook skills cmd_load_all just seeded survive.
+    try:
+        from mongo.data.agent_skills import build_agent_skill_docs
+        from shared import mongo_tools
+        coll = mongo_tools.db()["skills"]
+        docs = build_agent_skill_docs()
+        for d in docs:
+            coll.update_one({"_id": d["_id"]}, {"$set": d}, upsert=True)
+        out["agent_skills"] = f"upserted {len(docs)}"
+    except Exception as e:  # noqa: BLE001
+        log.exception("admin seed: agent_skills upsert failed")
+        out["agent_skills"] = f"error: {e}"
+
     return out

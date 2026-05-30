@@ -48,7 +48,15 @@ test("live ticker: visible when a draft job is in flight", async ({ page, reques
   expect(errors.length).toBe(0);
 });
 
-test("live ticker: WebSocket connection survives a route change", async ({ page }) => {
+test("live ticker: WebSocket connection survives a route change", async ({ page, baseURL }) => {
+  // The LiveTicker only opens a WebSocket where it can connect — local dev
+  // (vite proxies the upgrade). On the deployed Firebase origin, Hosting can't
+  // proxy WS to Cloud Run, so the ticker uses the /api/live/now poller and no
+  // WS is opened by design. Skip the WS-transport assertion there.
+  test.skip(
+    !baseURL?.includes("localhost") && !baseURL?.includes("127.0.0.1"),
+    "WS transport is local-only; the deployed ticker polls /api/live/now",
+  );
   // The LiveTicker opens a WS on mount. It should persist across
   // client-side navigations (Layout holds the component above the
   // router Outlet).
