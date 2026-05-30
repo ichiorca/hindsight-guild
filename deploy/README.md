@@ -30,7 +30,7 @@ when you only want to redeploy part of the stack.
 
 | Phase | Script | What it does |
 |------:|---|---|
-| 1 | `01-build-images.sh` | Submits `cloudbuild.yaml` to Cloud Build: builds **17 images** in parallel (agent-base + 11 worker jobs + 4 HTTP services + UI), pushes to Artifact Registry tagged `:latest` and `:$SHORT_SHA`. |
+| 1 | `01-build-images.sh` | Submits `cloudbuild.yaml` to Cloud Build: builds **16 images** in parallel (agent-base + 11 worker jobs + 4 HTTP services), pushes to Artifact Registry tagged `:latest` and `:$SHORT_SHA`. |
 | 2 | `02-deploy-services.sh` | Deploys **13 A2A agent services** (one Cloud Run service per agent, all from the same `agent-base` image) + **4 HTTP services** (edit-capture-handler, slack-approval-handler, substack-publisher, web-api). Writes service URLs into Secret Manager so callers can resolve them at runtime. |
 | 3 | `03-deploy-jobs.sh` | Deploys **11 Cloud Run jobs** (the cron workers). |
 | 4 | `04-schedulers.sh` | Wires **11 Cloud Scheduler triggers** to the jobs. Schedules live in `deploy/env.sh`. |

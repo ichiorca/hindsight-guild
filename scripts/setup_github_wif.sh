@@ -40,6 +40,7 @@ gcloud iam service-accounts create sa-deployer \
 DEPLOY_ROLES=(
   roles/run.admin                       # deploy services + jobs, set their IAM
   roles/cloudbuild.builds.editor        # gcloud builds submit
+  roles/storage.admin                   # upload source to the _cloudbuild staging bucket
   roles/artifactregistry.admin          # create repo + push images
   roles/cloudscheduler.admin            # create/update scheduler triggers
   roles/secretmanager.admin             # create/version + bind the URL secrets

@@ -123,4 +123,4 @@ WEB_API_URL=$(gcloud run services describe web-api \
 echo ""
 echo "==> Service deploys complete."
 echo "    web-api URL: ${WEB_API_URL}"
-echo "    (needed by deploy/05-deploy-ui.sh to bake into the UI bundle)"
+echo "    (Firebase Hosting rewrites /api → this service; no URL is baked.)"
