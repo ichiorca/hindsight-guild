@@ -585,7 +585,7 @@ async def _run_draft_job(job_id: str, req: DraftRequest) -> None:
                 return
             raise
 
-        result = _unwrap_a2a_pipeline_response(envelope)
+        result = _unwrap_a2a_pipeline_response(envelope, agent_id=req.agent_id)
         _job_set(job_id, status="done", result=result,
                  completed_at=datetime.now(UTC).isoformat())
         _record_signal_backref(req, result)
@@ -671,7 +671,55 @@ def _record_signal_backref(req: DraftRequest, result: dict | None) -> None:
                     req.triggered_by_signal_id, e)
 
 
-def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
+# Single-agent handoff → (shape discriminator, the agent's structured key). The
+# UI's per-shape renderer (web/src/routes/Drafting.tsx) switches on `shape`;
+# e2e_handoffs validates the key. JSON-emitting agents put their payload in the
+# response text (parsed below); the prose agents (cmo/voice/ops) get their
+# summary from the response text + numeric defaults.
+_HANDOFF_SHAPE = {
+    "positioning_agent":     ("positioning", "positioning_proposals"),
+    "paid_media_agent":      ("paid_media", "paid_media_action"),
+    "research_agent":        ("research", "research_findings"),
+    "analytics_agent":       ("analytics", "analytics_snapshot"),
+    "self_critique_agent":   ("self_critique", "self_critique"),
+    "lifecycle_email_agent": ("lifecycle_email", "email_sequence"),
+    "image_brief_agent":     ("image_brief", "image"),
+    "review_agent":          ("review", "review"),
+    "cmo_planner":           ("cmo_memo", "memo_markdown"),
+    "customer_voice_agent":  ("customer_voice", None),
+    "ops_qa_agent":          ("ops_qa", None),
+}
+
+
+def _apply_handoff_shape(agent_id: str, out: dict, draft_text: str,
+                          parsed: dict) -> None:
+    """Stamp a single-agent handoff result with the per-agent ``shape`` + key
+    the UI renderer + e2e_handoffs expect, drawing from the agent's JSON output
+    (``parsed``) or its prose text (``draft_text``)."""
+    spec = _HANDOFF_SHAPE.get(agent_id)
+    if not spec:
+        return
+    shape, key = spec
+    out["shape"] = shape
+    if key and key not in out:
+        # JSON agents: take the wrapper key if present, else the whole payload.
+        val = parsed.get(key) if isinstance(parsed, dict) else None
+        if val is None and key == "memo_markdown":
+            val = draft_text  # cmo returns the memo as prose
+        elif val is None:
+            val = parsed or None
+        out[key] = val
+    if agent_id == "customer_voice_agent":
+        out.setdefault("summary", parsed.get("summary") or draft_text)
+        out.setdefault("inserted", parsed.get("inserted", 0))
+        out.setdefault("skipped_low_value", parsed.get("skipped_low_value", 0))
+    elif agent_id == "ops_qa_agent":
+        out.setdefault("summary", parsed.get("summary") or draft_text)
+        out.setdefault("checked", parsed.get("checked", 0))
+        out.setdefault("incidents_opened", parsed.get("incidents_opened", 0))
+
+
+def _unwrap_a2a_pipeline_response(envelope: dict, agent_id: str | None = None) -> dict:
     """Translate the A2A JSON-RPC envelope into the UI's flat draft shape.
 
     The pipeline ends with a Finalizer agent whose only job is to emit one
@@ -762,7 +810,7 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
             "research_findings", "review", "image", "eval_scores", "synthetic"}
     passthrough = {k: v for k, v in final.items() if k not in _std}
 
-    return {
+    out = {
         **passthrough,
         "synthetic": False,
         "telemetry_id": final.get("telemetry_id"),
@@ -781,6 +829,19 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
         # without us promising a schema for it.
         "_a2a_envelope": envelope,
     }
+
+    # Single-agent handoffs: stamp the per-agent shape + structured key the UI
+    # renderer + e2e_handoffs expect (the pipeline path has no agent_id and is
+    # left untouched). Draw from the agent's parsed JSON output, falling back to
+    # its prose for the memo/summary agents.
+    if agent_id and agent_id != "pipeline":
+        parsed_payload = final if (isinstance(final, dict) and final) else {}
+        if not parsed_payload:
+            maybe = _try_parse_json(draft_text)
+            parsed_payload = maybe if isinstance(maybe, dict) else {}
+        _apply_handoff_shape(agent_id, out, draft_text, parsed_payload)
+
+    return out
 
 
 def _try_parse_json(text: str) -> Any:
