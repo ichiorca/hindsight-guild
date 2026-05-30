@@ -637,6 +637,9 @@ export function useDraft() {
       // Optional single-agent handoff. Omitted = full drafting team.
       // See ROUTING_OPTIONS in Drafting.tsx for the supported values.
       agent_id?: string;
+      // Visualization style for ImageBrief: contextual | infographic |
+      // excalidraw | auto (let the agent choose per channel + topic).
+      visual_pref?: string;
     }): Promise<Record<string, unknown>> => {
       const { job_id } = await post<{ job_id: string; status: string }>("/draft", p);
       for (let i = 0; i < DRAFT_POLL_MAX_ATTEMPTS; i++) {

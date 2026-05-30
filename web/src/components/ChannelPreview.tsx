@@ -16,6 +16,7 @@ export interface PreviewImage {
   alt_text: string;
   aspect_ratio?: string;
   mode?: "api" | "stub";
+  kind?: string;   // contextual | infographic | excalidraw
 }
 
 interface ChannelPreviewProps {
@@ -23,15 +24,47 @@ interface ChannelPreviewProps {
   text: string;
   subject?: string;
   image?: PreviewImage | null;
+  images?: PreviewImage[] | null;   // ImageBrief's 1-3 visuals
   className?: string;
 }
 
-export function ChannelPreview({ channel, text, subject, image, className }: ChannelPreviewProps) {
-  if (channel === "linkedin") return <LinkedInPreview text={text} image={image} className={className} />;
-  if (channel === "email") return <EmailPreview text={text} subject={subject} image={image} className={className} />;
-  if (channel === "blog") return <BlogPreview text={text} image={image} className={className} />;
-  if (channel === "substack") return <SubstackPreview text={text} image={image} className={className} />;
-  return <DefaultPreview text={text} image={image} className={className} />;
+// Render the secondary visuals (beyond the in-context primary) as a labeled grid.
+function ExtraVisuals({ images }: { images: PreviewImage[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+        + {images.length} more visual{images.length > 1 ? "s" : ""}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {images.map((im, i) => (
+          <div key={i} className="space-y-1">
+            <ImageBlock image={im} aspect="16/9" />
+            {im.kind && (
+              <span className="text-[10px] text-muted-foreground capitalize">{im.kind}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ChannelPreview({ channel, text, subject, image, images, className }: ChannelPreviewProps) {
+  const imgs = images && images.length ? images : image ? [image] : [];
+  const primary = imgs[0] ?? null;
+  const inner =
+    channel === "linkedin" ? <LinkedInPreview text={text} image={primary} className={className} />
+    : channel === "email" ? <EmailPreview text={text} subject={subject} image={primary} className={className} />
+    : channel === "blog" ? <BlogPreview text={text} image={primary} className={className} />
+    : channel === "substack" ? <SubstackPreview text={text} image={primary} className={className} />
+    : <DefaultPreview text={text} image={primary} className={className} />;
+  if (imgs.length <= 1) return inner;
+  return (
+    <div className="space-y-3">
+      {inner}
+      <ExtraVisuals images={imgs.slice(1)} />
+    </div>
+  );
 }
 
 /**

@@ -48,6 +48,7 @@ export default function DraftingPage() {
   const [icp, setIcp] = useState("seg_founder_b2b");
   const [channel, setChannel] = useState("linkedin");
   const [topic, setTopic] = useState("");
+  const [visualPref, setVisualPref] = useState("auto");
   const [agentId, setAgentId] = useState<string>(initialAgent);
   const draft = useDraft();
 
@@ -104,7 +105,8 @@ export default function DraftingPage() {
         & { draft?: string; review?: { recommendation?: string; flags?: Array<{ phrase: string; issue: string }> };
             eval_scores?: EvalScores;
             research_findings?: { customer_voice?: string[]; approved_claims?: string[] };
-            image?: { url: string | null; alt_text: string; aspect_ratio?: string; mode?: "api" | "stub" } }
+            image?: { url: string | null; alt_text: string; aspect_ratio?: string; mode?: "api" | "stub" };
+            images?: Array<{ url: string | null; alt_text: string; aspect_ratio?: string; mode?: "api" | "stub"; kind?: string }> }
         // Lifecycle Email
         & { email_sequence?: { _id: string; sequence_name: string; icp_segment: string;
                                steps: Array<{ step_num: number; subject: string; body: string;
@@ -133,6 +135,7 @@ export default function DraftingPage() {
       icp_segment: icp,
       channel,
       topic_hint: topic,
+      visual_pref: visualPref,
       agent_id: agentId === "pipeline" ? undefined : agentId,
     });
 
@@ -242,6 +245,20 @@ export default function DraftingPage() {
                   </Select>
                   <p className="text-[11px] text-muted-foreground mt-1">
                     {CHANNELS.find((c) => c.id === channel)?.description}
+                  </p>
+                </div>
+              )}
+              {needsChannel && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Visual style</label>
+                  <Select value={visualPref} onChange={(e) => setVisualPref(e.target.value)} className="mt-1">
+                    <option value="auto">Auto — let the team choose per topic</option>
+                    <option value="infographic">Infographic — clean diagram</option>
+                    <option value="excalidraw">Excalidraw — hand-drawn diagram</option>
+                    <option value="contextual">Contextual image</option>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Diagrams (infographic/excalidraw) have legible labels; contextual is an image-model scene. The team may produce 1–3 visuals.
                   </p>
                 </div>
               )}
@@ -392,6 +409,7 @@ function AgentResult({
       eval_scores?: EvalScores | null;
       research_findings?: { customer_voice?: string[]; approved_claims?: string[] };
       image?: { url: string | null; alt_text: string; aspect_ratio?: string; mode?: "api" | "stub" };
+      images?: Array<{ url: string | null; alt_text: string; aspect_ratio?: string; mode?: "api" | "stub"; kind?: string }>;
     };
     return (
       <>
@@ -409,7 +427,7 @@ function AgentResult({
             </div>
           </CardHeader>
           <CardContent>
-            <ChannelPreview channel={channel} text={r.draft ?? ""} image={r.image ?? null} />
+            <ChannelPreview channel={channel} text={r.draft ?? ""} image={r.image ?? null} images={r.images ?? null} />
           </CardContent>
         </Card>
 

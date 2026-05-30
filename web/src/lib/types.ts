@@ -7,6 +7,7 @@ export interface DraftImage {
   mode: "api" | "stub";
   prompt?: string;
   rationale?: string;
+  kind?: string;   // contextual | infographic | excalidraw
 }
 
 export interface QueueItem {
@@ -24,6 +25,7 @@ export interface QueueItem {
   icp_segment: string | null;
   experiment_id: string | null;
   image?: DraftImage | null;
+  images?: DraftImage[] | null;   // ImageBrief's 1-3 visuals
   publish_state?: PublishState | null;
   publish_url?: string | null;
   publish_mode?: "api" | "manual_review" | null;
