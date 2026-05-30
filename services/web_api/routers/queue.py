@@ -18,6 +18,19 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 
+def _numeric_scores(val: object) -> dict:
+    """Keep only numeric rubric scores. A populated eval_scores also carries
+    provenance fields — judge_model (str) + scored_at (datetime) — which would
+    fail the QueueItem.eval_scores: dict[str, float] schema and 500 the queue."""
+    if not isinstance(val, dict):
+        try:
+            val = val.model_dump() if hasattr(val, "model_dump") else {}
+        except Exception:
+            val = {}
+    return {k: v for k, v in val.items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool)}
+
+
 def _as_image(val: object) -> dict | None:
     """Coerce a stored image value to a dict. The image_brief agent emits its
     result as JSON TEXT, so older/raw rows may carry the image as a JSON
@@ -144,7 +157,7 @@ def get_queue(channel: str | None = None, limit: int = 50):
             skill_version=r.skill_version,
             subject=subject_from_draft(draft_blob),
             draft_text=draft_text,
-            eval_scores=r.eval_scores or {},
+            eval_scores=_numeric_scores(r.eval_scores),
             review_flags=raw.get("review_flags") or [],
             customer_voice_used=raw.get("customer_voice_used") or [],
             icp_segment=raw.get("icp_segment"),
@@ -209,12 +222,6 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
             draft_text = f"# {head}\n\n{body}" if head else body
         else:
             draft_text = draft_blob
-        eval_scores = r.get("eval_scores") or {}
-        if not isinstance(eval_scores, dict):
-            try:
-                eval_scores = eval_scores.model_dump() if hasattr(eval_scores, "model_dump") else {}
-            except Exception:
-                eval_scores = {}
         sig = signal_map.get(r["telemetry_id"])
         items.append(QueueItem(
             telemetry_id=r["telemetry_id"],
@@ -227,7 +234,7 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
             skill_version=r.get("skill_version") or "",
             subject=subject_from_draft(draft_blob),
             draft_text=draft_text or "",
-            eval_scores={k: v for k, v in eval_scores.items() if v is not None},
+            eval_scores=_numeric_scores(r.get("eval_scores")),
             review_flags=raw.get("review_flags") or [],
             customer_voice_used=raw.get("customer_voice_used") or [],
             icp_segment=raw.get("icp_segment"),
