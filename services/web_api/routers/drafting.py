@@ -242,6 +242,46 @@ async def ws_live(ws: WebSocket) -> None:
         _live_broadcaster.unsubscribe(ws)
 
 
+def subject_from_draft(draft: object) -> str | None:
+    """Best-effort title for a draft card: email ``subject`` / Substack
+    ``headline``. Channels with no native subject (LinkedIn, blog) return None
+    and the UI falls back to a body preview. Accepts the draft as a dict or a
+    JSON string (the Content agent returns JSON for email/substack)."""
+    d = draft
+    if isinstance(d, str):
+        s = d.strip()
+        if not s.startswith("{"):
+            return None
+        try:
+            import json as _json
+            d = _json.loads(s)
+        except Exception:
+            return None
+    if isinstance(d, dict):
+        for k in ("subject", "headline", "title", "subtitle"):
+            v = d.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return None
+
+
+# UI agent_ids (e.g. "content_agent", "cmo_planner") differ from the SHORT
+# names used for the deployed Cloud Run services + their a2a_url_<name> secrets
+# (e.g. "content", "cmo"). The rule is "strip the _agent suffix"; cmo_planner is
+# the one that doesn't follow it. Without this mapping, per-agent handoffs in
+# cloud fail with "A2A service for '<agent>_agent' not configured" because the
+# secret is named a2a_url_<short>, not a2a_url_<agent_id>.
+_AGENT_SECRET_ALIASES = {
+    "cmo_planner": "cmo",
+}
+
+
+def _a2a_short_name(key: str) -> str:
+    if key in _AGENT_SECRET_ALIASES:
+        return _AGENT_SECRET_ALIASES[key]
+    return key[: -len("_agent")] if key.endswith("_agent") else key
+
+
 def _pipeline_url(agent_id: str | None = None) -> str | None:
     """Resolve an A2A URL — for the full pipeline by default, or for a
     specific agent when ``agent_id`` is set.
@@ -260,13 +300,20 @@ def _pipeline_url(agent_id: str | None = None) -> str | None:
     # Default = full pipeline.
     key = "pipeline" if (agent_id is None or agent_id == "pipeline") else agent_id
 
-    env_url = os.environ.get(f"A2A_URL_{key.upper()}")
-    if env_url:
-        return env_url.rstrip("/")
+    # Try the agent_id as-is (LOCAL_DEV env convention) AND the deployed short
+    # name (cloud secrets a2a_url_<short>) so both environments resolve.
+    candidates = [key]
+    short = _a2a_short_name(key)
+    if short != key:
+        candidates.append(short)
 
-    secret_url = _secret_optional(f"a2a_url_{key.lower()}")
-    if secret_url:
-        return secret_url.rstrip("/")
+    for cand in candidates:
+        env_url = os.environ.get(f"A2A_URL_{cand.upper()}")
+        if env_url:
+            return env_url.rstrip("/")
+        secret_url = _secret_optional(f"a2a_url_{cand.lower()}")
+        if secret_url:
+            return secret_url.rstrip("/")
 
     # LOCAL_DEV convenience: A2A_URL_BASE=http://localhost lets us derive
     # http://localhost:<port> for each agent without per-agent env vars.
@@ -619,7 +666,8 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
             if isinstance(parsed, dict):
                 final.update(parsed)
 
-    draft_text = final.get("draft") or ""
+    raw_draft = final.get("draft") or ""
+    draft_text = raw_draft
     if isinstance(draft_text, dict):
         draft_text = draft_text.get("body_markdown") or draft_text.get("body") or str(draft_text)
 
@@ -629,6 +677,10 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
         "channel": final.get("channel"),
         "icp_segment": final.get("icp_segment"),
         "draft": draft_text,
+        # Email subject / Substack headline, surfaced as a first-class field so
+        # the queue card + drafting preview show a title instead of dropping it
+        # (the dict-flatten above used to discard the headline entirely).
+        "subject": subject_from_draft(raw_draft),
         "research_findings": final.get("research_findings") or {},
         "review": final.get("review") or {},
         "image": final.get("image") or None,

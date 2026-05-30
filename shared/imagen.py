@@ -226,14 +226,19 @@ def _generate_vertex(
         blob_name = f"{telemetry_id}/{uuid.uuid4().hex[:8]}.png"
         blob = bucket.blob(blob_name)
         blob.upload_from_string(img._image_bytes, content_type="image/png")
-        # Public read so the email/web previews can embed without auth.
-        # In Phase 2 swap for signed URLs + auth.
-        blob.make_public()
+        # Public read is granted at the BUCKET level via IAM (allUsers ->
+        # roles/storage.objectViewer). We must NOT call blob.make_public()
+        # here: the media bucket has Uniform Bucket-Level Access enabled, which
+        # rejects legacy per-object ACLs with a 400 ("Cannot get legacy ACL ...
+        # when uniform bucket-level access is enabled") — that exception used to
+        # drop every generated image to a stub. Construct the public URL
+        # directly instead. In Phase 2 swap for signed URLs + auth.
+        public_url = f"https://storage.googleapis.com/{MEDIA_BUCKET}/{blob_name}"
 
         return GeneratedImage(
             mode="api",
             gcs_uri=f"gs://{MEDIA_BUCKET}/{blob_name}",
-            public_url=blob.public_url,
+            public_url=public_url,
             alt_text=alt_text,
             width=width, height=height,
             prompt=prompt, aspect_ratio=aspect_ratio,

@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir '.[web-api]'
 COPY shared/ ./shared/
 COPY agents/ ./agents/
 COPY skills/ ./skills/
+COPY prompts/ ./prompts/
 COPY mongo/ ./mongo/
 COPY services/web_api/ ./services/web_api/
 COPY services/promotion_gate/ ./services/promotion_gate/

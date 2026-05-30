@@ -16,6 +16,7 @@ export interface QueueItem {
   channel: string | null;
   skill_id: string;
   skill_version: string;
+  subject?: string | null;
   draft_text: string;
   eval_scores: EvalScores;
   review_flags: ReviewFlag[];

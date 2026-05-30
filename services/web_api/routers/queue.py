@@ -11,6 +11,7 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from services.web_api.routers.drafting import subject_from_draft
 from shared import mongo_tools
 
 router = APIRouter()
@@ -28,6 +29,7 @@ class QueueItem(BaseModel):
     channel: str | None
     skill_id: str
     skill_version: str
+    subject: str | None = None   # email subject / substack headline, if any
     draft_text: str
     eval_scores: dict[str, float]
     review_flags: list[dict[str, Any]]
@@ -125,6 +127,7 @@ def get_queue(channel: str | None = None, limit: int = 50):
             channel=r.channel,
             skill_id=r.skill_id,
             skill_version=r.skill_version,
+            subject=subject_from_draft(draft_blob),
             draft_text=draft_text,
             eval_scores=r.eval_scores or {},
             review_flags=raw.get("review_flags") or [],
@@ -207,6 +210,7 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
             # real pipeline rows, which would 500 the required-str fields.
             skill_id=r.get("skill_id") or "",
             skill_version=r.get("skill_version") or "",
+            subject=subject_from_draft(draft_blob),
             draft_text=draft_text or "",
             eval_scores={k: v for k, v in eval_scores.items() if v is not None},
             review_flags=raw.get("review_flags") or [],

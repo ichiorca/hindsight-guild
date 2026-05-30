@@ -84,8 +84,19 @@ else:
     from google.cloud import secretmanager as _sm_mod  # noqa: E402
     bigquery = _bq_mod      # re-export so endpoints below can use it
     secretmanager = _sm_mod
-    BQ = bigquery.Client(project=PROJECT_ID)
     _sm = secretmanager.SecretManagerServiceClient()
+    # BigQuery analytics views (analytics.*, telemetry.*) are NOT the
+    # operational store in this deployment — the Mongo telemetry mirror is, and
+    # every BQ-backed endpoint has a Mongo fallback (`if BQ is None`). The BQ
+    # analytics views are also unpopulated here, so reading them yields empty
+    # trends/queue/live even though Mongo has the data. Default BQ to None so
+    # those endpoints serve from Mongo; opt back into BigQuery (for the future
+    # GA4/analytics work) with WEB_API_USE_BQ=1.
+    BQ = (
+        bigquery.Client(project=PROJECT_ID)
+        if os.environ.get("WEB_API_USE_BQ", "").lower() in ("1", "true", "yes")
+        else None
+    )
 
 log = logging.getLogger(__name__)
 

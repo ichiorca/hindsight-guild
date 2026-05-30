@@ -408,7 +408,7 @@ function QueueRow({ item, focused, armed, onFocus }: {
         {/* Channel-native preview replaces the flat text block */}
         {mode !== "edit" && (
           <>
-            <ChannelPreview channel={item.channel} text={item.draft_text} image={item.image} />
+            <ChannelPreview channel={item.channel} text={item.draft_text} subject={item.subject ?? undefined} image={item.image} />
             {item.customer_voice_used?.length > 0 && (
               <div className="rounded-lg border bg-card p-4">
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">

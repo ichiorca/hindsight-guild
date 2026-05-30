@@ -38,6 +38,7 @@ COPY agents/ ./agents/
 COPY mongo/ ./mongo/
 COPY shared/ ./shared/
 COPY skills/ ./skills/
+COPY prompts/ ./prompts/
 COPY scripts/aeo/ ./scripts/aeo/
 
 ENV PYTHONPATH=/app \

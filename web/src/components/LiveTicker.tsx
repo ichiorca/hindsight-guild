@@ -56,6 +56,18 @@ interface LiveNowPayload {
  * If the WS keeps failing (no /api/ws/live mount, network blocked), we
  * fall back to a one-shot REST fetch every 15s so the UI still updates.
  */
+// Firebase Hosting can't proxy WebSocket upgrades to the Cloud Run backend, so
+// on the deployed origin the /api/ws/live handshake 404s and the browser logs a
+// console error on every (re)connect. Only attempt the socket where it can
+// actually complete — local dev, where vite's proxy forwards the upgrade (or
+// when explicitly enabled via VITE_LIVE_WS=1). Everywhere else we rely on the
+// REST /api/live/now poller, which this ticker already supports. The socket
+// works through vite's dev proxy on localhost, so gate on that.
+const WS_CAPABLE =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1");
+
 function useLiveSocket(): LiveNowPayload | null {
   const [data, setData] = useState<LiveNowPayload | null>(null);
   // Hold the socket + reconnect timer across renders without retriggering effects.
@@ -137,7 +149,12 @@ function useLiveSocket(): LiveNowPayload | null {
       restFallbackTimer.current = window.setInterval(fetchOnce, 15_000);
     };
 
-    connect();
+    if (WS_CAPABLE) {
+      connect();
+    } else {
+      // No WS on this origin — drive the ticker from the REST poller only.
+      startRestFallback();
+    }
 
     return () => {
       cancelled = true;
