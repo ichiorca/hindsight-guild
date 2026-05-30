@@ -18,6 +18,21 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 
+def _as_image(val: object) -> dict | None:
+    """Coerce a stored image value to a dict. The image_brief agent emits its
+    result as JSON TEXT, so older/raw rows may carry the image as a JSON
+    string; the QueueItem.image field + UI expect an object."""
+    if isinstance(val, dict):
+        return val or None
+    if isinstance(val, str) and val.strip():
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Queue
 # ---------------------------------------------------------------------------
@@ -134,7 +149,7 @@ def get_queue(channel: str | None = None, limit: int = 50):
             customer_voice_used=raw.get("customer_voice_used") or [],
             icp_segment=raw.get("icp_segment"),
             experiment_id=r.experiment_id,
-            image=raw.get("image"),
+            image=_as_image(raw.get("image")),
             publish_state=(appr or {}).get("publish_state"),
             publish_url=(appr or {}).get("external_url"),
             publish_mode=(appr or {}).get("publish_mode"),
@@ -217,7 +232,7 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
             customer_voice_used=raw.get("customer_voice_used") or [],
             icp_segment=raw.get("icp_segment"),
             experiment_id=r.get("experiment_id"),
-            image=raw.get("image"),
+            image=_as_image(raw.get("image")),
             publish_state=(appr or {}).get("publish_state"),
             publish_url=(appr or {}).get("external_url"),
             publish_mode=(appr or {}).get("publish_mode"),

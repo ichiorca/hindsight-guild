@@ -248,20 +248,36 @@ def subject_from_draft(draft: object) -> str | None:
     and the UI falls back to a body preview. Accepts the draft as a dict or a
     JSON string (the Content agent returns JSON for email/substack)."""
     d = draft
-    if isinstance(d, str):
-        s = d.strip()
-        if not s.startswith("{"):
-            return None
+    # If it's a JSON string, parse it and read the structured field. If it's a
+    # plain string, fall THROUGH to the plain-text heuristics below (do NOT
+    # early-return — that was a bug that dropped every "Subject:" line).
+    if isinstance(d, str) and d.strip().startswith("{"):
         try:
             import json as _json
-            d = _json.loads(s)
+            d = _json.loads(d.strip())
         except Exception:
-            return None
+            d = draft
     if isinstance(d, dict):
         for k in ("subject", "headline", "title", "subtitle"):
             v = d.get(k)
             if isinstance(v, str) and v.strip():
                 return v.strip()
+        return None
+    # Plain-text drafts: the Content/Reviser output for email leads with a
+    # "Subject: ..." line; blog/substack markdown leads with a "# Heading".
+    if isinstance(draft, str):
+        for line in draft.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            low = line.lower()
+            if low.startswith("subject:"):
+                return line.split(":", 1)[1].strip() or None
+            if low.startswith("title:"):
+                return line.split(":", 1)[1].strip() or None
+            if line.startswith("#"):
+                return line.lstrip("#").strip() or None
+            break  # only inspect the first non-empty line
     return None
 
 
@@ -573,6 +589,7 @@ async def _run_draft_job(job_id: str, req: DraftRequest) -> None:
         _job_set(job_id, status="done", result=result,
                  completed_at=datetime.now(UTC).isoformat())
         _record_signal_backref(req, result)
+        _persist_draft_asset(result)
     except asyncio.CancelledError:
         _job_set(job_id, status="failed", error="cancelled")
         raise
@@ -585,6 +602,43 @@ async def _run_draft_job(job_id: str, req: DraftRequest) -> None:
         log.exception("draft job %s failed: %s", job_id, e)
         _job_set(job_id, status="failed", error=f"{type(e).__name__}: {e}",
                  completed_at=datetime.now(UTC).isoformat())
+
+
+def _persist_draft_asset(result: dict | None) -> None:
+    """Backfill the draft's telemetry actions row with the image + eval_scores
+    + subject that the pipeline produces AFTER the content agent emits its row.
+
+    The queue/inbox reads telemetry ``actions`` rows. The ``draft_<channel>``
+    row is written when the Content agent finishes — before ImageBrief (image)
+    and Review (eval_scores) run — so without this backfill the inbox card
+    never shows the generated image or rubric scores. Best-effort: telemetry
+    enrichment must never fail the (already-succeeded) draft job.
+    """
+    if not isinstance(result, dict):
+        return
+    tid = result.get("telemetry_id")
+    if not tid:
+        return
+    sets: dict = {}
+    image = result.get("image")
+    if isinstance(image, dict) and image:
+        sets["raw.image"] = image
+    evs = result.get("eval_scores")
+    if isinstance(evs, dict) and evs:
+        sets["eval_scores"] = evs
+    subj = result.get("subject")
+    if isinstance(subj, str) and subj.strip():
+        sets["raw.subject"] = subj.strip()
+    if not sets:
+        return
+    try:
+        from shared import mongo_tools
+        mongo_tools.db()["actions"].update_many(
+            {"telemetry_id": tid, "action_type": {"$regex": "^draft_"}},
+            {"$set": sets},
+        )
+    except Exception as e:
+        log.warning("draft asset backfill failed for %s: %s", tid, e)
 
 
 def _record_signal_backref(req: DraftRequest, result: dict | None) -> None:
@@ -671,6 +725,24 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
     if isinstance(draft_text, dict):
         draft_text = draft_text.get("body_markdown") or draft_text.get("body") or str(draft_text)
 
+    # Single-agent handoffs (agent_id != pipeline) have NO Finalizer envelope,
+    # so `final` stays empty and draft_text is "". Fall back to the agent's
+    # raw text output — the longest candidate that isn't the finalizer JSON —
+    # so per-agent runs surface their result instead of an empty card.
+    if not draft_text and candidates:
+        non_json = [c for c in candidates if not isinstance(_try_parse_json(c), dict)]
+        pool = non_json or candidates
+        draft_text = max(pool, key=len)
+
+    # The image_brief agent emits its result as JSON TEXT, so state["image"]
+    # (and thus the finalizer envelope) carries the image as a JSON STRING.
+    # The UI + QueueItem expect an object — parse it so the generated image
+    # (url/alt_text/mode) actually renders instead of arriving as a string.
+    image_val = final.get("image")
+    if isinstance(image_val, str):
+        parsed_img = _try_parse_json(image_val)
+        image_val = parsed_img if isinstance(parsed_img, dict) else None
+
     return {
         "synthetic": False,
         "telemetry_id": final.get("telemetry_id"),
@@ -680,10 +752,10 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
         # Email subject / Substack headline, surfaced as a first-class field so
         # the queue card + drafting preview show a title instead of dropping it
         # (the dict-flatten above used to discard the headline entirely).
-        "subject": subject_from_draft(raw_draft),
+        "subject": subject_from_draft(raw_draft) or subject_from_draft(draft_text),
         "research_findings": final.get("research_findings") or {},
         "review": final.get("review") or {},
-        "image": final.get("image") or None,
+        "image": image_val or None,
         "eval_scores": final.get("eval_scores") or {},
         # Surface the raw envelope under a stable key so the UI can dig deeper
         # without us promising a schema for it.
