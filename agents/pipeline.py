@@ -126,10 +126,12 @@ def _ensure_session_state(callback_context):  # type: ignore[no-untyped-def]
                     m = _TOPIC_RE.search(msg_text)
                     if m:
                         state["topic_hint"] = m.group(1).strip()
-        # Critique + Reviser instructions reference {topic_hint}; ensure it
-        # ALWAYS resolves (empty if the message carried no "Focus on:" clause)
-        # so ADK template substitution never raises "Context variable not found".
+        # Critique + Reviser instructions reference {topic_hint} and
+        # {icp_segment}; ensure BOTH always resolve (empty when the message
+        # carried no such clause) so ADK template substitution never raises
+        # "Context variable not found" mid-pipeline.
         state.setdefault("topic_hint", "")
+        state.setdefault("icp_segment", "")
 
         # Derive skill_id from channel if still missing.
         if not state.get("skill_id") and state.get("channel"):
@@ -248,6 +250,17 @@ def _extract_user_message(callback_context) -> str:  # type: ignore[no-untyped-d
     callback context. The exact attribute varies across ADK versions, so we
     try a couple of common shapes before giving up.
     """
+    # ADK 1.x exposes the triggering message as callback_context.user_content
+    # (a types.Content with .parts). This is the path that actually works over
+    # A2A; the older shapes below are kept as fallbacks.
+    try:
+        content = getattr(callback_context, "user_content", None)
+        if content and getattr(content, "parts", None):
+            text = " ".join(getattr(p, "text", "") or "" for p in content.parts)
+            if text.strip():
+                return text
+    except Exception:
+        pass
     try:
         msg = getattr(callback_context, "user_message", None)
         if msg and getattr(msg, "parts", None):
