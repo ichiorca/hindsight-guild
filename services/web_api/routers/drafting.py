@@ -416,6 +416,33 @@ def _build_agent_message(req: DraftRequest) -> str:
     return f"Run {agent} for {icp} on {req.channel}. {topic}".strip()
 
 
+def _id_token_headers(target_url: str) -> dict:
+    """Authorization header for invoking a PRIVATE Cloud Run service.
+
+    Cloud Run service-to-service auth requires a Google-signed ID token whose
+    audience is the receiving service's URL; on Cloud Run it's minted from the
+    metadata server for the running service account (sa-agents). Without it,
+    a private A2A service returns 403. In LOCAL_DEV the A2A servers are plain
+    local processes with no auth, so no header is added.
+    """
+    if os.environ.get("LOCAL_DEV"):
+        return {}
+    try:
+        from urllib.parse import urlsplit
+
+        import google.auth.transport.requests
+        import google.oauth2.id_token
+
+        parts = urlsplit(target_url)
+        audience = f"{parts.scheme}://{parts.netloc}"
+        token = google.oauth2.id_token.fetch_id_token(
+            google.auth.transport.requests.Request(), audience)
+        return {"Authorization": f"Bearer {token}"}
+    except Exception as e:  # noqa: BLE001 — auth is best-effort; surface as 403 if it fails
+        log.warning("could not mint ID token for %s: %s", target_url, e)
+        return {}
+
+
 async def _run_draft_job(job_id: str, req: DraftRequest) -> None:
     """Background runner. Translates the UI's DraftRequest into the A2A
     JSON-RPC envelope, posts to the resolved service, unwraps the response,
@@ -469,7 +496,7 @@ async def _run_draft_job(job_id: str, req: DraftRequest) -> None:
         timeout = httpx.Timeout(connect=3.0, read=120.0, write=10.0, pool=5.0)
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                r = await client.post(url, json=payload)
+                r = await client.post(url, json=payload, headers=_id_token_headers(url))
                 r.raise_for_status()
                 envelope = r.json()
         except (httpx.ConnectError, httpx.ConnectTimeout) as conn_err:

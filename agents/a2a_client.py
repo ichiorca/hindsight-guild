@@ -69,6 +69,32 @@ def _agent_url(agent_name: str) -> str:
     return resolved
 
 
+def _auth_headers(target_url: str) -> dict:
+    """Authorization header to invoke a PRIVATE Cloud Run A2A service.
+
+    Cloud Run service-to-service auth needs a Google-signed ID token whose
+    audience is the receiving service's URL, minted from the metadata server
+    for the running service account (sa-agents). Without it a private service
+    returns 403. No-op in LOCAL_DEV where A2A servers are plain processes.
+    """
+    if os.environ.get("LOCAL_DEV"):
+        return {}
+    try:
+        from urllib.parse import urlsplit
+
+        import google.auth.transport.requests
+        import google.oauth2.id_token
+
+        parts = urlsplit(target_url)
+        audience = f"{parts.scheme}://{parts.netloc}"
+        token = google.oauth2.id_token.fetch_id_token(
+            google.auth.transport.requests.Request(), audience)
+        return {"Authorization": f"Bearer {token}"}
+    except Exception as e:  # noqa: BLE001 — best-effort; a 403 surfaces if it fails
+        log.warning("could not mint ID token for %s: %s", target_url, e)
+        return {}
+
+
 def get_agent_card(agent_name: str) -> dict:
     """Fetch (and cache) the agent card — A2A capability discovery.
 
@@ -80,7 +106,7 @@ def get_agent_card(agent_name: str) -> dict:
     if agent_name in _CARD_CACHE:
         return _CARD_CACHE[agent_name]
     url = f"{_agent_url(agent_name)}/.well-known/agent-card.json"
-    r = httpx.get(url, timeout=10)
+    r = httpx.get(url, timeout=10, headers=_auth_headers(url))
     r.raise_for_status()
     card = r.json()
     _CARD_CACHE[agent_name] = card
@@ -124,7 +150,7 @@ def call_agent(agent_name: str, message: str | dict,
             },
         },
     }
-    r = httpx.post(url, json=payload, timeout=timeout)
+    r = httpx.post(url, json=payload, timeout=timeout, headers=_auth_headers(url))
     r.raise_for_status()
     return r.json()
 
