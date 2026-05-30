@@ -154,8 +154,14 @@ def apply() -> None:
 
     # skills — promotion_gate scans by candidate presence; CMO Planner finds
     # self_critique_proposals; Content Agent finds by _id.
-    db.skills.create_index([("applies_to.channels", ASCENDING),
-                             ("applies_to.icp_segments", ASCENDING)])
+    # Two SEPARATE single-field indexes, not a compound one: a skill's
+    # applies_to.channels and applies_to.icp_segments are BOTH arrays, and
+    # MongoDB rejects a compound index spanning two array fields
+    # ("cannot index parallel arrays"). The compound index builds on an empty
+    # collection but makes every insert with both arrays fail. Separate
+    # multikey indexes cover filtering by channel or by icp_segment.
+    db.skills.create_index([("applies_to.channels", ASCENDING)])
+    db.skills.create_index([("applies_to.icp_segments", ASCENDING)])
     db.skills.create_index([("self_critique_proposal.status", ASCENDING)])
     db.skills.create_index([("promotion_request.status", ASCENDING)])
 
