@@ -74,6 +74,9 @@ _CHANNEL_RE = re.compile(
 )
 _ICP_RE = re.compile(r"targeting\s+([a-z_][a-z0-9_]+)", re.IGNORECASE)
 _EXP_RE = re.compile(r"experiment[_ -]?id[:=]?\s*([a-z0-9_]+)", re.IGNORECASE)
+# The drafting message is "Draft a <channel> post targeting <icp>. Focus on:
+# <topic>" — capture everything after "Focus on:" as the topic_hint.
+_TOPIC_RE = re.compile(r"focus on:\s*(.+)", re.IGNORECASE | re.DOTALL)
 _SKILL_BY_CHANNEL = {
     "linkedin":        "linkedin_post",
     "email":           "nurture_email",
@@ -104,7 +107,7 @@ def _ensure_session_state(callback_context):  # type: ignore[no-untyped-def]
             state["telemetry_id"] = f"act_{uuid.uuid4().hex[:12]}"
 
         # Pull the first user message text to extract hints.
-        if not state.get("channel") or not state.get("icp_segment"):
+        if not all(state.get(k) for k in ("channel", "icp_segment", "topic_hint")):
             msg_text = _extract_user_message(callback_context)
             if msg_text:
                 if not state.get("channel"):
@@ -119,6 +122,14 @@ def _ensure_session_state(callback_context):  # type: ignore[no-untyped-def]
                     m = _EXP_RE.search(msg_text)
                     if m:
                         state["experiment_id"] = m.group(1)
+                if not state.get("topic_hint"):
+                    m = _TOPIC_RE.search(msg_text)
+                    if m:
+                        state["topic_hint"] = m.group(1).strip()
+        # Critique + Reviser instructions reference {topic_hint}; ensure it
+        # ALWAYS resolves (empty if the message carried no "Focus on:" clause)
+        # so ADK template substitution never raises "Context variable not found".
+        state.setdefault("topic_hint", "")
 
         # Derive skill_id from channel if still missing.
         if not state.get("skill_id") and state.get("channel"):
