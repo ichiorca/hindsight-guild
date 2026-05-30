@@ -77,6 +77,12 @@ _EXP_RE = re.compile(r"experiment[_ -]?id[:=]?\s*([a-z0-9_]+)", re.IGNORECASE)
 # The drafting message is "Draft a <channel> post targeting <icp>. Focus on:
 # <topic>" — capture everything after "Focus on:" as the topic_hint.
 _TOPIC_RE = re.compile(r"focus on:\s*(.+)", re.IGNORECASE | re.DOTALL)
+# "Visual preference: excalidraw" — the founder's chosen visualization style
+# (contextual | infographic | excalidraw | auto), plumbed in by web_api.
+_VISUAL_RE = re.compile(
+    r"visual[_ ]?pref(?:erence)?[:=]\s*(contextual|infographic|excalidraw|auto)",
+    re.IGNORECASE,
+)
 _SKILL_BY_CHANNEL = {
     "linkedin":        "linkedin_post",
     "email":           "nurture_email",
@@ -126,6 +132,10 @@ def _ensure_session_state(callback_context):  # type: ignore[no-untyped-def]
                     m = _TOPIC_RE.search(msg_text)
                     if m:
                         state["topic_hint"] = m.group(1).strip()
+                if not state.get("visual_pref"):
+                    m = _VISUAL_RE.search(msg_text)
+                    if m:
+                        state["visual_pref"] = m.group(1).lower()
         # Critique + Reviser instructions reference {topic_hint} and
         # {icp_segment}; ensure BOTH always resolve (empty when the message
         # carried no such clause) so ADK template substitution never raises
@@ -146,6 +156,9 @@ def _ensure_session_state(callback_context):  # type: ignore[no-untyped-def]
                       "aeo_score", "recommendation", "approval_id",
                       "icp", "resolved_channel"):
             state.setdefault(_slot, "")
+        # ImageBrief reads {visual_pref}; it emits a LIST into state["images"].
+        state.setdefault("visual_pref", "auto")
+        state.setdefault("images", [])
 
         # Derive skill_id from channel if still missing.
         if not state.get("skill_id") and state.get("channel"):

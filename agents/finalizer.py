@@ -45,6 +45,7 @@ _FINALIZER_KEYS = (
     "draft",
     "research_findings",
     "image",
+    "images",
     "review",
 )
 
@@ -72,6 +73,11 @@ class _StateEnvelopeAgent(BaseAgent):
         # 2. Assemble + emit the envelope.
         try:
             payload = {k: state.get(k) for k in _FINALIZER_KEYS}
+            # ImageBrief emits a LIST into state["images"]. Surface the first as
+            # `image` so single-image consumers (older UI, telemetry) still work.
+            imgs = payload.get("images")
+            if isinstance(imgs, list) and imgs and not payload.get("image"):
+                payload["image"] = imgs[0]
             text = json.dumps(payload, default=_json_default)
         except Exception as e:
             log.exception("finalizer failed to assemble envelope: %s", e)

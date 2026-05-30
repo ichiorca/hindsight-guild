@@ -32,6 +32,10 @@ class DraftRequest(BaseModel):
     channel: str  # linkedin | email | blog | substack | lifecycle_email | google_ads | meta_ads | linkedin_ads
     topic_hint: str | None = ""
     experiment_id: str | None = None
+    # Visualization style for the ImageBrief agent: contextual (image model) |
+    # infographic (clean diagram) | excalidraw (hand-drawn diagram) | auto
+    # (let the agent pick per channel + topic). Default "auto".
+    visual_pref: str | None = "auto"
     # Optional single-agent handoff. When None or "pipeline", the full
     # drafting team runs (Research → Critique → Reviser → … → Finalizer).
     # When set to an agent_id (e.g., "lifecycle_email_agent"), the UI's
@@ -387,12 +391,17 @@ def _build_agent_message(req: DraftRequest) -> str:
     exp = req.experiment_id
 
     agent = req.agent_id or "pipeline"
+    # ImageBrief (in the pipeline) reads the visualization preference from the
+    # message; only append it when the founder chose a non-auto style.
+    vpref = (req.visual_pref or "auto").lower()
+    vsuffix = f" Visual preference: {vpref}" if vpref in ("contextual", "infographic", "excalidraw") else ""
     if agent in ("pipeline", "content_agent"):
         # Full pipeline OR Content-only handoff — original message shape.
         return (
             f"Draft a {req.channel} post targeting {icp}. "
             f"{('Focus on: ' + topic) if topic else ''}"
             f"{(' Experiment: ' + exp) if exp else ''}"
+            f"{vsuffix}"
         ).strip()
 
     if agent == "lifecycle_email_agent":
@@ -623,6 +632,9 @@ def _persist_draft_asset(result: dict | None) -> None:
     image = result.get("image")
     if isinstance(image, dict) and image:
         sets["raw.image"] = image
+    images = result.get("images")
+    if isinstance(images, list) and images:
+        sets["raw.images"] = images
     evs = result.get("eval_scores")
     if isinstance(evs, dict) and evs:
         sets["eval_scores"] = evs
@@ -800,6 +812,29 @@ def _unwrap_a2a_pipeline_response(envelope: dict, agent_id: str | None = None) -
         parsed_img = _try_parse_json(image_val)
         image_val = parsed_img if isinstance(parsed_img, dict) else None
 
+    # images: ImageBrief now emits a LIST (1-3 visuals). It can arrive as a JSON
+    # string, and individual items can be JSON strings too — normalise to a list
+    # of dicts. Then keep `image` (primary) in sync for single-image consumers.
+    images_val = final.get("images")
+    if isinstance(images_val, str):
+        parsed_imgs = _try_parse_json(images_val)
+        images_val = parsed_imgs if isinstance(parsed_imgs, list) else None
+    if isinstance(images_val, list):
+        norm: list = []
+        for it in images_val:
+            if isinstance(it, str):
+                pit = _try_parse_json(it)
+                it = pit if isinstance(pit, dict) else None
+            if isinstance(it, dict) and it:
+                norm.append(it)
+        images_val = norm
+    else:
+        images_val = []
+    if not image_val and images_val:
+        image_val = images_val[0]
+    if not images_val and isinstance(image_val, dict):
+        images_val = [image_val]
+
     # Pass through any STRUCTURED keys the agent emitted that aren't part of
     # the standard pipeline shape — e.g. a single-agent handoff's
     # positioning_proposals, memo_markdown, paid_media_action, or an analytics
@@ -807,7 +842,8 @@ def _unwrap_a2a_pipeline_response(envelope: dict, agent_id: str | None = None) -
     # shape stays stable; this only ADDS the per-agent fields the UI's per-shape
     # renderer (Drafting.tsx AgentResult) + e2e_handoffs look for.
     _std = {"telemetry_id", "channel", "icp_segment", "draft", "subject",
-            "research_findings", "review", "image", "eval_scores", "synthetic"}
+            "research_findings", "review", "image", "images", "eval_scores",
+            "synthetic"}
     passthrough = {k: v for k, v in final.items() if k not in _std}
 
     out = {
@@ -824,6 +860,7 @@ def _unwrap_a2a_pipeline_response(envelope: dict, agent_id: str | None = None) -
         "research_findings": final.get("research_findings") or {},
         "review": final.get("review") or {},
         "image": image_val or None,
+        "images": images_val,
         "eval_scores": final.get("eval_scores") or {},
         # Surface the raw envelope under a stable key so the UI can dig deeper
         # without us promising a schema for it.

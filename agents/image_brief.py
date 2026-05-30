@@ -19,7 +19,7 @@ from google.adk.tools import FunctionTool
 from agents._factory import make_llm_agent
 from agents._image_safety import check_image_safety_tool
 from agents._prompts import IMAGE_BRIEF_INSTRUCTIONS
-from shared import imagen
+from shared import diagrams, imagen
 
 # ImageBrief doesn't touch the mongo helpers directly — it reads voice/claims
 # through the MCPToolset under the read-only DB user. Setting a process default
@@ -56,6 +56,28 @@ def imagen_generate(
 
 imagen_generate_tool = FunctionTool(func=imagen_generate)
 
+
+def diagram_generate(
+    telemetry_id: str,
+    mermaid: str,
+    look: str = "handDrawn",
+    alt_text: str = "",
+) -> dict:
+    """Render a Mermaid diagram to a hosted PNG with LEGIBLE text labels.
+
+    look="handDrawn" -> excalidraw hand-drawn aesthetic; look="classic" -> a
+    clean, flat infographic. PREFER this over imagen_generate for content
+    channels (blog/substack/email/linkedin) when the draft has a framework,
+    flow, comparison, or before/after that a labeled diagram conveys — an image
+    model garbles text, this does not. Returns {mode, url, alt_text, kind, ...}.
+    """
+    return diagrams.render_mermaid(
+        mermaid=mermaid, look=look, telemetry_id=telemetry_id, alt_text=alt_text,
+    )
+
+
+diagram_generate_tool = FunctionTool(func=diagram_generate)
+
 # ImageBrief reads Mongo via the toolset but doesn't write — and historically
 # this file omitted mongodb_toolset entirely (image safety + imagen are the
 # only data-plane tools). Pass mode=None to preserve that surface exactly.
@@ -64,11 +86,12 @@ image_brief_agent = make_llm_agent(
     instructions=IMAGE_BRIEF_INSTRUCTIONS,
     model="gemini-3.1-flash-lite",
     mode=None,
-    output_key="image",
+    output_key="images",
     skill_id="image_brief",
     action_type="image_brief_op",
     extra_tools=[
         check_image_safety_tool,   # MUST be called before imagen_generate
         imagen_generate_tool,
+        diagram_generate_tool,
     ],
 )

@@ -46,6 +46,20 @@ def _as_image(val: object) -> dict | None:
     return None
 
 
+def _as_images(val: object) -> list | None:
+    """Coerce a stored images value (ImageBrief emits a LIST of 1-3 visuals) to
+    a list of dicts, tolerating a JSON-string list or JSON-string items."""
+    if isinstance(val, str) and val.strip():
+        try:
+            val = json.loads(val)
+        except Exception:
+            return None
+    if not isinstance(val, list):
+        return None
+    out = [d for d in (_as_image(it) for it in val) if d]
+    return out or None
+
+
 # ---------------------------------------------------------------------------
 # Queue
 # ---------------------------------------------------------------------------
@@ -65,6 +79,7 @@ class QueueItem(BaseModel):
     icp_segment: str | None
     experiment_id: str | None
     image: dict[str, Any] | None = None   # {url, alt_text, aspect_ratio, mode, prompt, rationale}
+    images: list[dict[str, Any]] | None = None  # ImageBrief's 1-3 visuals
     publish_state: str | None = None      # publishing | published | manual_review | failed
     publish_url: str | None = None
     publish_mode: str | None = None       # api | manual_review
@@ -163,6 +178,7 @@ def get_queue(channel: str | None = None, limit: int = 50):
             icp_segment=raw.get("icp_segment"),
             experiment_id=r.experiment_id,
             image=_as_image(raw.get("image")),
+            images=_as_images(raw.get("images")),
             publish_state=(appr or {}).get("publish_state"),
             publish_url=(appr or {}).get("external_url"),
             publish_mode=(appr or {}).get("publish_mode"),
@@ -240,6 +256,7 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
             icp_segment=raw.get("icp_segment"),
             experiment_id=r.get("experiment_id"),
             image=_as_image(raw.get("image")),
+            images=_as_images(raw.get("images")),
             publish_state=(appr or {}).get("publish_state"),
             publish_url=(appr or {}).get("external_url"),
             publish_mode=(appr or {}).get("publish_mode"),

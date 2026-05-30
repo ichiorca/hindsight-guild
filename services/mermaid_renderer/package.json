@@ -1,0 +1,11 @@
+{
+  "name": "mermaid-renderer",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Renders Mermaid diagrams to PNG (handDrawn/classic). Used by the ImageBrief agent for content-channel infographics with legible labels.",
+  "dependencies": {
+    "express": "^4.19.2",
+    "@mermaid-js/mermaid-cli": "^11.4.2"
+  }
+}
