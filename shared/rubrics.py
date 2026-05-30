@@ -271,6 +271,17 @@ def score_draft(candidate: str, channel: str | None = None,
                 _recent_negatives(channel, r.rejection_category)
             )
 
+    # EvalTask aborts the ENTIRE evaluation (all six rubrics → no scores) if a
+    # single metric references a column the dataset lacks — e.g. icp_relevance
+    # needs `icp_description`, conversion_intent needs `channel`, and most need
+    # `negative_examples`. Guarantee every referenced column exists with a safe
+    # placeholder so a draft missing one input still gets scored on the rest.
+    needed_cols = {"response"}
+    for r in rubrics:
+        needed_cols.update(r.input_variables)
+    for col in needed_cols:
+        row.setdefault(col, "(unspecified)")
+
     dataset = pd.DataFrame([row])
 
     metrics = [_build_metric(r) for r in rubrics]
