@@ -280,11 +280,21 @@ def submit_decision(d: Decision):
     from services.web_api.main import _secret_optional
     url = _secret_optional("edit_capture_handler_url")
     if url:
-        r = httpx.post(f"{url}/handle", json=d.model_dump(), timeout=20)
-        r.raise_for_status()
-        return r.json()
+        # The handler does EXTRA work (classifying edits tone/fact/cta), but a
+        # founder's approve/reject must NEVER fail just because that secondary
+        # service is unavailable. On any handler error, fall through to the
+        # durable Mongo write below (which also captures negative_examples on
+        # reject + publishes on approve) so the decision still lands.
+        try:
+            r = httpx.post(f"{url}/handle", json=d.model_dump(), timeout=20)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:  # noqa: BLE001 — degrade to the durable path
+            log.warning("edit_capture_handler unavailable (%s); writing the "
+                        "decision directly to Mongo instead", e)
 
-    # LOCAL_DEV path — write the decision to Mongo through the history-
+    # Durable path (also the LOCAL_DEV path) — write the decision to Mongo
+    # through the history-
     # aware helpers so every write captures a pre-image in history.<coll>
     # and lands with a _provenance block. Founder approvals are
     # authoritative source-of-truth, so trust_tier="verified".

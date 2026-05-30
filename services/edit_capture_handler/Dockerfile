@@ -6,6 +6,7 @@ COPY pyproject.toml ./pyproject.toml
 RUN pip install --no-cache-dir '.[http-handler-edit]'
 
 COPY shared/ ./shared/
+COPY mongo/ ./mongo/
 COPY services/edit_capture_handler/ ./services/edit_capture_handler/
 
 ENV PYTHONPATH=/app
