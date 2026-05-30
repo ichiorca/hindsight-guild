@@ -60,6 +60,18 @@ def _as_images(val: object) -> list | None:
     return out or None
 
 
+def _iso_utc(ts: object) -> str:
+    """Serialize a Mongo datetime as a TZ-AWARE ISO string. pymongo returns
+    naive (UTC) datetimes, and a naive isoformat() ('...T23:35:16') is parsed
+    as LOCAL time by the browser — which made every recent draft read as 'now'.
+    Stamp UTC so the frontend's relative-time is correct."""
+    if hasattr(ts, "isoformat"):
+        if getattr(ts, "tzinfo", None) is None:
+            ts = ts.replace(tzinfo=UTC)   # type: ignore[union-attr]
+        return ts.isoformat()             # type: ignore[union-attr]
+    return str(ts)
+
+
 # ---------------------------------------------------------------------------
 # Queue
 # ---------------------------------------------------------------------------
@@ -241,7 +253,7 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
         sig = signal_map.get(r["telemetry_id"])
         items.append(QueueItem(
             telemetry_id=r["telemetry_id"],
-            ts=r["ts"].isoformat() if hasattr(r.get("ts"), "isoformat") else str(r.get("ts")),
+            ts=_iso_utc(r.get("ts")),
             agent=r.get("agent") or "",
             channel=r.get("channel"),
             # `or ""` (not a .get default): these land as explicit None on

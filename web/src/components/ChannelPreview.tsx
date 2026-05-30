@@ -82,11 +82,20 @@ function ImageBlock({
 }) {
   if (!image) return null;
   if (image.url) {
+    // Diagrams (infographic/excalidraw) must show in FULL — object-cover would
+    // crop the labels. Photos/contextual can fill+crop. Diagrams get a white
+    // backdrop so the letterboxing reads clean.
+    const isDiagram = image.kind === "infographic" || image.kind === "excalidraw";
     return (
       <img
         src={image.url}
         alt={image.alt_text}
-        className={cn("w-full object-cover", rounded && "rounded-md", className)}
+        className={cn(
+          "w-full",
+          isDiagram ? "object-contain bg-white" : "object-cover",
+          rounded && "rounded-md",
+          className,
+        )}
         style={{ aspectRatio: aspect }}
         loading="lazy"
       />
