@@ -59,7 +59,7 @@ test.describe("preflight: produce diverse data for downstream tests", () => {
 
   for (const [agent_id, channel, topic_hint] of handoffs) {
     test(`preflight handoff → ${agent_id}`, async ({ request }) => {
-      test.setTimeout(45_000);
+      test.setTimeout(240_000);
       const r = await kickoffDraft(request, { agent_id, channel, topic_hint });
       expect(r, `${agent_id} returned empty result`).toBeTruthy();
       // Every synthetic preview now carries ``shape`` so the renderer

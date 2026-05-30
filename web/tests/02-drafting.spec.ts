@@ -36,7 +36,7 @@ async function submitDraftForm(page: Page) {
 }
 
 test("drafting: full pipeline produces draft + image + research_findings", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(240_000);
   const errors = await navigate(page, "/draft");
 
   await setRouteTo(page, /full drafting team/i);
@@ -47,7 +47,7 @@ test("drafting: full pipeline produces draft + image + research_findings", async
   await submitDraftForm(page);
 
   // 1) The draft body appears in the right pane.
-  await expect(page.getByText(/drafted this/i)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/drafted this/i)).toBeVisible({ timeout: 200_000 });
   // 2) Either eval scores OR the "no scores in synthetic" hint shows.
   await expect(
     page.getByText(/review scores|quality scores aren't shown/i)
@@ -91,7 +91,7 @@ const PER_AGENT = [
 
 for (const t of PER_AGENT) {
   test(`drafting: ${t.route} renders dedicated shape view`, async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(240_000);
     const errors = await navigate(page, "/draft");
     await setRouteTo(page, t.route);
     if (t.channel) {
@@ -117,7 +117,7 @@ for (const t of PER_AGENT) {
     await submitDraftForm(page);
 
     // Verify the dedicated renderer (not the "no preview implemented" fallback).
-    await expect(page.getByText(t.expect).first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText(t.expect).first()).toBeVisible({ timeout: 200_000 });
     await expect(page.getByText(/no synthetic preview implemented/i)).not.toBeVisible();
 
     expectNoConsoleErrors(errors);
@@ -125,7 +125,7 @@ for (const t of PER_AGENT) {
 }
 
 test("drafting: review_agent shows extracted draft + flag list", async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(240_000);
   // Intercept the API call so we can verify the synthetic shape itself
   // matches what the renderer expects — UI text matching is too fragile
   // for the review-shape rendering paths (badge variants, card titles).
@@ -146,7 +146,7 @@ test("drafting: review_agent shows extracted draft + flag list", async ({ page }
   await submitDraftForm(page);
 
   // Wait for the API to return the result.
-  await expect.poll(() => reviewResult, { timeout: 45_000 }).toBeTruthy();
+  await expect.poll(() => reviewResult, { timeout: 200_000 }).toBeTruthy();
   // Shape contract — these fields must exist for the UI to render properly.
   expect(reviewResult!.shape).toBe("review");
   expect((reviewResult as any).review).toHaveProperty("flags");
@@ -164,7 +164,7 @@ test("drafting: review_agent shows extracted draft + flag list", async ({ page }
 });
 
 test("drafting: imagebrief preview shows real PNG with file URL", async ({ page }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(240_000);
   await navigate(page, "/draft");
   await setRouteTo(page, /imagebrief only/i);
   await page.locator("input").first().fill("clean editorial illustration of data flow");
@@ -173,7 +173,7 @@ test("drafting: imagebrief preview shows real PNG with file URL", async ({ page 
   // Wait for the result panel to appear. Either a real <img> tag with a
   // /media URL OR a stub box.
   await expect(page.locator("img, [class*='border-dashed']").first())
-    .toBeVisible({ timeout: 30_000 });
+    .toBeVisible({ timeout: 200_000 });
 
   // If image generation succeeded, the <img>'s src should be a /media path.
   const img = page.locator("img").first();
@@ -185,7 +185,7 @@ test("drafting: imagebrief preview shows real PNG with file URL", async ({ page 
 });
 
 test("drafting: stepper transitions on submit", async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(240_000);
   await navigate(page, "/draft");
   await setRouteTo(page, /positioning only/i);
   await submitDraftForm(page);

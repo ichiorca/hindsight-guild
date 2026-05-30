@@ -115,8 +115,8 @@ test("signals: route-now responds with a status payload", async ({ request }) =>
   // /learning summary polling) the cumulative wait can exceed the default
   // 30s action timeout. In isolation this completes in ~3s; we give the
   // request budget for the heavier suite case.
-  test.setTimeout(90_000);
-  const r = await request.post("/api/signals/route-now", { timeout: 60_000 });
+  test.setTimeout(240_000);
+  const r = await request.post("/api/signals/route-now", { timeout: 200_000 });
   expect(r.ok()).toBeTruthy();
   const body = await r.json();
   expect(["ok", "no_pending", "disabled"]).toContain(body.status);

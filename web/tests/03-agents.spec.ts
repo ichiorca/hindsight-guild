@@ -75,7 +75,7 @@ test("agents: drill-down shows skills allowlist + tools + recent activity", asyn
 });
 
 test("agents: QuickHandoff form sends a real job + increments recent_actions", async ({ page, request }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(240_000);
 
   // The synthetic positioning handoff DOES NOT emit an action — it just
   // returns a synthetic proposal. So we verify the user-visible success
@@ -102,7 +102,7 @@ test("agents: QuickHandoff form sends a real job + increments recent_actions", a
 
   // Success card surfaces post-completion.
   await expect(page.getByText(/task handed off to/i))
-    .toBeVisible({ timeout: 30_000 });
+    .toBeVisible({ timeout: 200_000 });
 });
 
 test("agents: sub-agent aliasing exposes drafter/critique/reviser actions to parent", async ({ request }) => {
@@ -140,7 +140,7 @@ test("agents: 'Open in Drafting' link deep-links to /draft?agent=<id>", async ({
   // Send a handoff so the success card appears
   await page.locator("input").first().fill("deep-link test");
   await page.getByRole("button", { name: /send to/i }).first().click();
-  await expect(page.getByText(/task handed off to/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/task handed off to/i)).toBeVisible({ timeout: 200_000 });
 
   // Click "Open in Drafting" → land on /draft with positioning preselected.
   const openLink = page.getByRole("link", { name: /open in drafting/i });

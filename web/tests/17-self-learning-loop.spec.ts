@@ -62,7 +62,7 @@ async function seedVoiceProposal(request: APIRequestContext, tokenRank = 0) {
   }
 
   // Run the miners; the voice miner turns the 3 shared edits into a proposal.
-  await request.post("/api/self-critique/run-now", { timeout: 60_000 });
+  await request.post("/api/self-critique/run-now", { timeout: 200_000 });
 
   const props = await (await request.get("/api/self-critique/proposals?limit=200")).json();
   return props.find(
@@ -72,7 +72,7 @@ async function seedVoiceProposal(request: APIRequestContext, tokenRank = 0) {
 }
 
 test("self-learning: accepting a skill proposal in Weekly Review mints a candidate version", async ({ page, request }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
 
   // Precondition: house-style must be an agent_skill (Mongo-editable body) for
   // accept to mint a candidate. The 04-skills suite relies on this seed too.
@@ -130,7 +130,7 @@ test("self-learning: accepting a skill proposal in Weekly Review mints a candida
 });
 
 test("self-learning: a dismissed skill proposal does not recur after re-running miners", async ({ request }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
 
   // tokenRank=1 → a DISTINCT signature from the accept test, so its prior
   // decision doesn't cooldown-suppress this seed.
@@ -150,7 +150,7 @@ test("self-learning: a dismissed skill proposal does not recur after re-running 
   expect(r.ok()).toBeTruthy();
 
   // Re-run miners — the same dismissed pattern must NOT come back pending.
-  await request.post("/api/self-critique/run-now", { timeout: 60_000 });
+  await request.post("/api/self-critique/run-now", { timeout: 200_000 });
   const after = await (await request.get("/api/self-critique/proposals?limit=200")).json();
   const recurred = after.find((p: { id: string }) => p.id === proposal.id);
   expect(

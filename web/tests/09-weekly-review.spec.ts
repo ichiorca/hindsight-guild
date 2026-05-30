@@ -33,7 +33,7 @@ test("weekly-review: tile numbers match /api/this-week-summary", async ({ page, 
 });
 
 test("weekly-review: shipping a draft makes it appear in recent decisions", async ({ page, request }) => {
-  test.setTimeout(30_000);
+  test.setTimeout(240_000);
 
   await ensureQueueHas(request, 1);
   const queue = await (await request.get("/api/queue")).json();

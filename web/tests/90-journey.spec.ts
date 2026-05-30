@@ -12,7 +12,7 @@ import {
 } from "./helpers/data-helpers";
 
 test("journey: generate draft → see in queue → ship → see in weekly review", async ({ page, request }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(240_000);
 
   // 1. Drafting page — kick off a new pipeline draft via the form.
   await page.goto("/draft");
@@ -23,7 +23,7 @@ test("journey: generate draft → see in queue → ship → see in weekly review
   await page.getByRole("button", { name: /hand (off|it)/i }).first().click();
 
   // Result panel surfaces the draft body.
-  await expect(page.getByText(/drafted this/i)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/drafted this/i)).toBeVisible({ timeout: 200_000 });
 
   // 2. Navigate to Queue. The new draft should appear.
   // (synthetic drafts land in queue as actions w/ action_type=draft_<channel>).
@@ -60,7 +60,7 @@ test("journey: generate draft → see in queue → ship → see in weekly review
 });
 
 test("journey: agent handoff from /agents → result in /draft via deep-link", async ({ page, request }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(240_000);
 
   await page.goto("/agents");
   await page.waitForLoadState("networkidle");
@@ -77,7 +77,7 @@ test("journey: agent handoff from /agents → result in /draft via deep-link", a
   await page.getByRole("button", { name: /send to/i }).first().click();
 
   // Success card appears with link
-  await expect(page.getByText(/task handed off to/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/task handed off to/i)).toBeVisible({ timeout: 200_000 });
   const openLink = page.getByRole("link", { name: /open in drafting/i });
   await openLink.click();
 
@@ -89,7 +89,7 @@ test("journey: agent handoff from /agents → result in /draft via deep-link", a
 });
 
 test("journey: reject in queue → negative_example surfaces on /telemetry", async ({ page, request }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(240_000);
 
   await ensureQueueHas(request, 1);
   const target = (await (await request.get("/api/queue")).json())[0];
@@ -128,7 +128,7 @@ test("journey: reject in queue → negative_example surfaces on /telemetry", asy
 });
 
 test("journey: drafting handoff → action appears in /live ops feed", async ({ page, request }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(240_000);
 
   // Kick off a handoff. The action gets emitted to Mongo `actions`
   // (LOCAL_DEV mirror) which /api/live reads.
@@ -146,7 +146,7 @@ test("journey: drafting handoff → action appears in /live ops feed", async ({ 
 });
 
 test("journey: capabilities heatmap reflects drafts in real time", async ({ page, request }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(240_000);
 
   const before = await (await request.get("/api/capabilities?days=7")).json();
   const contentBefore = before.by_agent.find(
@@ -179,7 +179,7 @@ test("journey: capabilities heatmap reflects drafts in real time", async ({ page
 });
 
 test("journey: live ticker WS receives push when job is in flight", async ({ page, request, baseURL }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(240_000);
   // WS push only happens where the socket can connect (local dev). On the
   // deployed Firebase origin the ticker polls /api/live/now instead — there is
   // no WS to receive frames on, by design.

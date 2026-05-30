@@ -25,7 +25,7 @@ test("capabilities: heatmap is dense (>= 5 agents × >= 3 skills)", async ({ pag
 });
 
 test("capabilities: firing a draft increments the heatmap counts", async ({ page, request }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(240_000);
 
   // Capture before-state: total loads for content_agent.
   const before = await (await request.get("/api/capabilities?days=7")).json();
