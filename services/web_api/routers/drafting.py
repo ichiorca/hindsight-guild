@@ -493,11 +493,14 @@ async def _run_draft_job(job_id: str, req: DraftRequest) -> None:
             },
         }
 
-        # 120s is the existing budget; pipeline runs ~30–60s on Gemini API.
         # Connect timeout is intentionally short (3s) so we fail FAST to
         # synthetic in LOCAL_DEV when the A2A server isn't actually running.
-        # Read timeout stays at 120s for the slow LLM-driven pipeline.
-        timeout = httpx.Timeout(connect=3.0, read=120.0, write=10.0, pool=5.0)
+        # Read timeout is 300s: the full pipeline (Research → Content →
+        # Critique loop ×2 → AEO restructure → ImageBrief → Review →
+        # Finalizer) runs every stage to completion on Gemini API and can
+        # exceed 120s end-to-end; the job runs in the background and the UI
+        # polls, so a longer read budget never blocks a request thread.
+        timeout = httpx.Timeout(connect=3.0, read=300.0, write=10.0, pool=5.0)
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 r = await client.post(url, json=payload, headers=_id_token_headers(url))
