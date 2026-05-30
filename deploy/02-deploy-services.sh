@@ -26,7 +26,7 @@ for name in "${!A2A_APPS[@]}"; do
     --args="agents.a2a_server:${app_attr},--host,0.0.0.0,--port,8080" \
     --region="$REGION" \
     --service-account="$SA" \
-    --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION}" \
+    --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
     --memory=1Gi --cpu=1 \
     --no-allow-unauthenticated \
     --project="$PROJECT_ID"
@@ -64,7 +64,7 @@ gcloud run deploy edit-capture-handler \
   --image="$(image_ref edit-capture-handler)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
   --memory=512Mi \
   --allow-unauthenticated \
   --project="$PROJECT_ID"
@@ -83,7 +83,7 @@ gcloud run deploy slack-approval-handler \
   --image="$(image_ref slack-approval-handler)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},${GENAI}" \
   --memory=256Mi \
   --allow-unauthenticated \
   --project="$PROJECT_ID"
@@ -93,7 +93,7 @@ gcloud run deploy substack-publisher \
   --image="$(image_ref substack-publisher)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
   --memory=512Mi \
   --no-allow-unauthenticated \
   --project="$PROJECT_ID"
@@ -112,7 +112,7 @@ gcloud run deploy web-api \
   --image="$(image_ref web-api)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
   --memory=1Gi --cpu=1 \
   --allow-unauthenticated \
   --project="$PROJECT_ID"

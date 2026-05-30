@@ -15,7 +15,7 @@ for job in "${!JOBS[@]}"; do
     --image="$(image_ref "$job")" \
     --region="$REGION" \
     --service-account="$SA" \
-    --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION}" \
+    --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
     --memory=1Gi --cpu=1 \
     --task-timeout=900s \
     --project="$PROJECT_ID"

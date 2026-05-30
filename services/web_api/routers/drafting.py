@@ -476,15 +476,19 @@ async def _run_draft_job(job_id: str, req: DraftRequest) -> None:
         # icp from text — single-agent calls get a more targeted brief
         # because each agent has its own task surface.
         msg = _build_agent_message(req)
+        # A2A 0.3.x JSON-RPC: method is "message/send" (was "tasks/send" in the
+        # 0.1 draft), parts use "kind" (not "type"), and the message carries a
+        # messageId + kind. ADK's to_a2a server speaks this shape.
         payload = {
             "jsonrpc": "2.0",
             "id": str(uuid.uuid4()),
-            "method": "tasks/send",
+            "method": "message/send",
             "params": {
-                "id": str(uuid.uuid4()),
                 "message": {
                     "role": "user",
-                    "parts": [{"type": "text", "text": msg}],
+                    "parts": [{"kind": "text", "text": msg}],
+                    "messageId": str(uuid.uuid4()),
+                    "kind": "message",
                 },
             },
         }
@@ -579,15 +583,22 @@ def _unwrap_a2a_pipeline_response(envelope: dict) -> dict:
     result = envelope.get("result") or {}
     final: dict = {}
 
-    # Preferred path: the Finalizer emits the full envelope as its text.
+    # Collect every text part the agent produced. A2A 0.3.x returns a Task
+    # whose output lives in `artifacts` and/or `history`; the 0.1 shape used
+    # `messages`; a bare Message reply puts parts at the top level. Gather
+    # from all of them so the Finalizer's JSON is found wherever it lands.
+    def _texts_from_parts(parts: Any) -> list[str]:
+        return [p["text"] for p in (parts or [])
+                if isinstance(p, dict) and p.get("text")]
+
     candidates: list[str] = []
-    for msg in result.get("messages", []) or []:
-        if msg.get("role") != "agent":
-            continue
-        for part in msg.get("parts", []) or []:
-            text = part.get("text") if isinstance(part, dict) else None
-            if text:
-                candidates.append(text)
+    candidates += _texts_from_parts(result.get("parts"))            # bare Message reply
+    for msg in (result.get("history") or result.get("messages") or []):
+        candidates += _texts_from_parts(msg.get("parts"))
+    for art in result.get("artifacts") or []:
+        candidates += _texts_from_parts(art.get("parts"))
+    status_msg = (result.get("status") or {}).get("message") or {}
+    candidates += _texts_from_parts(status_msg.get("parts"))
 
     # Walk newest-to-oldest so the Finalizer's output (last) wins.
     for text in reversed(candidates):

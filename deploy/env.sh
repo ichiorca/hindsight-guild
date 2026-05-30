@@ -109,3 +109,7 @@ SECRETS_FOR_AGENTS=(
   edit_capture_handler_url
   substack_publisher_url
 )
+
+# Vertex AI env for the genai client (ADK). Without these the client falls
+# back to the keyless Gemini Developer API and LLM calls produce nothing.
+GENAI="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION}"

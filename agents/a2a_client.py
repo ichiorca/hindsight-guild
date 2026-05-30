@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from typing import Any
 
 import httpx
@@ -138,15 +139,18 @@ def call_agent(agent_name: str, message: str | dict,
     session_id is reused.
     """
     url = _rpc_endpoint(agent_name)
+    # A2A 0.3.x: method "message/send", parts keyed by "kind", message carries
+    # a messageId + kind. (Was "tasks/send" + "type" in the 0.1 draft spec.)
     payload = {
         "jsonrpc": "2.0",
         "id": session_id or "1",
-        "method": "tasks/send",
+        "method": "message/send",
         "params": {
-            "id": session_id or "task-1",
             "message": {
                 "role": "user",
-                "parts": [{"type": "text", "text": message if isinstance(message, str) else str(message)}],
+                "parts": [{"kind": "text", "text": message if isinstance(message, str) else str(message)}],
+                "messageId": session_id or str(uuid.uuid4()),
+                "kind": "message",
             },
         },
     }
