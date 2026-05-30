@@ -133,6 +133,20 @@ def _ensure_session_state(callback_context):  # type: ignore[no-untyped-def]
         state.setdefault("topic_hint", "")
         state.setdefault("icp_segment", "")
 
+        # Downstream agents reference UPSTREAM pipeline outputs in their
+        # instruction templates ({research_findings}, {draft}, {critique},
+        # {image}, {aeo_score}, {recommendation}). In the full pipeline those
+        # are produced by earlier stages, but a STANDALONE per-agent handoff
+        # (a2a_server serves each agent individually with this same seeder)
+        # has none of them, so the template substitution raises "Context
+        # variable not found". Seed empty defaults. In the pipeline path each
+        # slot is set here BEFORE its producer runs and then overwritten by the
+        # producer's output_key, so this never changes pipeline behaviour.
+        for _slot in ("research_findings", "draft", "critique", "image",
+                      "aeo_score", "recommendation", "approval_id",
+                      "icp", "resolved_channel"):
+            state.setdefault(_slot, "")
+
         # Derive skill_id from channel if still missing.
         if not state.get("skill_id") and state.get("channel"):
             state["skill_id"] = _SKILL_BY_CHANNEL.get(state["channel"], "unknown")
