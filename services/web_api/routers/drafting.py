@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
@@ -244,6 +245,46 @@ async def ws_live(ws: WebSocket) -> None:
         pass
     finally:
         _live_broadcaster.unsubscribe(ws)
+
+
+_BOX_CHARS = "┌┐└┘├┤┬┴┼─│╔╗╚╝═║╠╣╦╩╬▼▲◄►◆◇■□"
+_FENCE_RE = re.compile(r"```[a-zA-Z0-9_-]*\n(.*?)```", re.DOTALL)
+_CAPTION_RE = re.compile(
+    r"^[ \t>*_]*\(?\s*(?:excalidraw sketch|sketch of|infographic of|diagram of|image of)[^\n]*\)?[*_]*\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_BRACKET_RE = re.compile(
+    r"[\[(]\s*(?:excalidraw sketch|image|diagram|sketch|figure)\b[^\])\n]*[\])]",
+    re.IGNORECASE,
+)
+
+
+def strip_visual_artifacts(text: str) -> str:
+    """Remove ASCII-art diagrams/tables + sketch/image placeholder captions
+    that LLM agents sometimes draw INTO the draft body (it renders as broken
+    box-drawing garbage). The real visual is produced separately by ImageBrief.
+
+    Conservative: only fenced blocks that look like art (box-drawing chars, a
+    pipe/dash grid, or an EXCALIDRAW/SKETCH marker) are removed — a legitimate
+    code example (JSON-LD, etc.) is left untouched.
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    def _is_art(block: str) -> bool:
+        if any(c in block for c in _BOX_CHARS):
+            return True
+        if re.search(r"excalidraw|\bsketch\b", block, re.IGNORECASE):
+            return True
+        # A grid of pipes (ASCII table/diagram): several lines, each with pipes.
+        pipe_lines = [ln for ln in block.splitlines() if ln.count("|") >= 2]
+        return len(pipe_lines) >= 3
+
+    out = _FENCE_RE.sub(lambda m: "" if _is_art(m.group(1)) else m.group(0), text)
+    out = _CAPTION_RE.sub("", out)
+    out = _BRACKET_RE.sub("", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
 
 
 def subject_from_draft(draft: object) -> str | None:
@@ -802,6 +843,11 @@ def _unwrap_a2a_pipeline_response(envelope: dict, agent_id: str | None = None) -
         non_json = [c for c in agent_texts if not isinstance(_try_parse_json(c), dict)]
         pool = non_json or agent_texts
         draft_text = max(pool, key=len)
+
+    # Strip any ASCII-art diagram/table or sketch placeholder an agent drew
+    # into the body (renders as broken box-drawing garbage). The real visual is
+    # produced separately by ImageBrief.
+    draft_text = strip_visual_artifacts(draft_text)
 
     # The image_brief agent emits its result as JSON TEXT, so state["image"]
     # (and thus the finalizer envelope) carries the image as a JSON STRING.

@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from services.web_api.routers.drafting import subject_from_draft
+from services.web_api.routers.drafting import strip_visual_artifacts, subject_from_draft
 from shared import mongo_tools
 
 router = APIRouter()
@@ -183,7 +183,7 @@ def get_queue(channel: str | None = None, limit: int = 50):
             skill_id=r.skill_id,
             skill_version=r.skill_version,
             subject=subject_from_draft(draft_blob),
-            draft_text=draft_text,
+            draft_text=strip_visual_artifacts(draft_text),
             eval_scores=_numeric_scores(r.eval_scores),
             review_flags=raw.get("review_flags") or [],
             customer_voice_used=raw.get("customer_voice_used") or [],
@@ -261,7 +261,7 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
             skill_id=r.get("skill_id") or "",
             skill_version=r.get("skill_version") or "",
             subject=subject_from_draft(draft_blob),
-            draft_text=draft_text or "",
+            draft_text=strip_visual_artifacts(draft_text or ""),
             eval_scores=_numeric_scores(r.get("eval_scores")),
             review_flags=raw.get("review_flags") or [],
             customer_voice_used=raw.get("customer_voice_used") or [],
