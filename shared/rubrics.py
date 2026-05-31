@@ -303,6 +303,40 @@ def score_draft(candidate: str, channel: str | None = None,
     return scores
 
 
+# ---------------------------------------------------------------------------
+# Quality floor — opt-in ship/hold gate over a draft's scores
+# ---------------------------------------------------------------------------
+
+# Rubrics that gate shipping. A draft must clear the floor on each of these to
+# auto-pass; the others (originality, conversion_intent) are tracked but not
+# blocking, mirroring the promotion-gate guardrail set.
+FLOOR_RUBRICS: tuple[str, ...] = (
+    "brand_voice", "claim_support", "claim_risk", "icp_relevance",
+)
+# Default normalized (0..1) floor. Env-overridable so prod can tune without a
+# code change. A draft scoring below this on any FLOOR_RUBRIC is held.
+QUALITY_FLOOR = float(os.environ.get("EVAL_QUALITY_FLOOR", "0.5"))
+
+
+def passes_quality_floor(scores: dict[str, float],
+                          floor: float | None = None,
+                          required: tuple[str, ...] = FLOOR_RUBRICS) -> bool:
+    """Return True if a draft's scores clear the ship/hold floor.
+
+    Pure and side-effect free — safe to call anywhere. A rubric that wasn't
+    scored (sampling skipped it, or the judge returned non-numeric) is treated
+    as *not failing*: absence of a score is not evidence of a bad draft, and we
+    never want the floor to silently hold every unsampled draft. Only a present
+    score below the floor holds the draft.
+    """
+    bar = QUALITY_FLOOR if floor is None else floor
+    for name in required:
+        val = scores.get(name)
+        if val is not None and val < bar:
+            return False
+    return True
+
+
 def evaluate_batch(rows: list[dict],
                     rubrics: list[RubricDef] | None = None) -> pd.DataFrame:
     """Batch evaluation used by services/eval_harness.

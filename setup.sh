@@ -97,7 +97,6 @@ fi
 #   - substack_api_key .............. substack_publisher auth
 #   - substack_publication_host ..... substack_publisher target publication
 #   - substack_publication_id ....... substack_publisher target publication
-#   - voyage_api_key ................ Voyage AI auto-embed for mongo MCP
 #   - edit_capture_handler_url ...... web_api → edit_capture_handler bridge
 #                                     (deploy.sh overwrites this once the
 #                                     handler is up)
@@ -114,7 +113,6 @@ for s in \
     substack_api_key \
     substack_publication_host \
     substack_publication_id \
-    voyage_api_key \
     edit_capture_handler_url ; do
   echo -n "PENDING" | gcloud secrets create "$s" --data-file=- --project "$PROJECT_ID" 2>/dev/null || true
 done

@@ -8,12 +8,16 @@ of Gemini agents on Google Cloud Agent Builder that researches, drafts,
 fact-checks, and routes content for approval — then learns from every decision.
 Its memory, judgment, and learning all live in **MongoDB Atlas**, queried live
 through the MongoDB MCP server. The team **remembers** what worked (Atlas as the
-system of record), **learns** from what got rejected (rubric grounding on past
-negatives), and **levels up** its own playbooks over time (skill promotion).
+system of record, including agent memory in `agent_lessons`), **learns** from
+what got rejected (rubric grounding on past negatives), and **levels up** its
+own playbooks over time (versioned skills + promotion gate).
 
 Built around real ADK 1.x multi-agent primitives, the Agent2Agent protocol,
-Vertex AI Memory Bank, Vertex AI Gen AI Evaluation Service, MongoDB Atlas via
-the MongoDB MCP server, and Model Armor.
+Vertex AI Gen AI Evaluation Service, and Model Armor — with **MongoDB Atlas as
+the primary store** (transactional + reference + memory + skills), reached
+through the MongoDB MCP server, with vector search via Atlas **Automated
+Embedding** (no client-side embedding API). BigQuery is used **only** for
+telemetry/analytics.
 
 It runs **lean** — a hard **cost cap** ($1k/mo at solo-founder scale), not a
 permission to ship stubs.
@@ -45,9 +49,10 @@ SequentialAgent: Drafting pipeline (Tue)│
                             after_agent_callback
                                             │
                               Vertex AI Eval Service
-                                  (all 6 rubrics)
+                            (all 6 rubrics, sampled inline)
                                             │
-                              telemetry.actions (BQ)
+                       telemetry dual-write: Mongo `actions`
+                       (primary, operational) + BigQuery (analytics)
                                             │
                               ┌─────────────┼─────────────┐
                               ▼             ▼             ▼
@@ -104,17 +109,18 @@ hindsight-guild/
 │   └── prds/                      # product specs (AEO, signal-drafting, closed-loop)
 ├── sql/schema.sql                 # 3 BQ tables + 3 views (C1)
 ├── mongo/
-│   ├── schema.py                  # 15 canonical collections + history.* + derived.* + vector index
+│   ├── schema.py                  # 15 canonical collections + history.* + derived.* + autoEmbed vector index
 │   ├── seed.py                    # back-compat shim → `python -m mongo.schema apply`
-│   ├── mcp_server.py              # MongoDB MCP server launcher (RO/RW)
+│   ├── mcp_server.py              # MongoDB MCP server launcher (RO/RW) — reads go through MCP
 │   └── history.py / queries.py    # provenance + pre-image capture; query helpers
 ├── shared/
-│   ├── telemetry.py               # BQ emitter + Pydantic schemas
-│   ├── rubrics.py                 # Vertex AI Eval Service, all 6 rubrics
-│   ├── mongo_tools.py             # pymongo helpers (RO/RW secret routing)
+│   ├── telemetry.py               # dual-writer: Mongo `actions` (primary) + BigQuery (analytics)
+│   ├── rubrics.py                 # Vertex AI Eval Service, all 6 rubrics + quality floor
+│   ├── mongo_tools.py             # pymongo helpers (RO/RW secret routing) — write path (provenance)
 │   ├── clients.py                 # lazy BQ/secret clients (LOCAL_DEV fallbacks)
-│   ├── skills.py                  # skill registry + read_skill tools + on-disk reconcile
-│   ├── memory.py                  # VertexAiMemoryBankService (ADK)
+│   ├── skills.py                  # skill registry + read_skill tools + Mongo→disk reconcile
+│   ├── memory.py                  # agent memory in MongoDB `agent_lessons` (remember_lesson/recall)
+│   ├── diagrams.py                # mermaid-renderer client → infographic/excalidraw image assets
 │   ├── allocator.py / provenance.py / bigquery_helper.py / imagen.py
 │   └── integrations/              # GA4 / HubSpot / Google Ads / LinkedIn clients
 ├── prompts/                       # versioned prompt templates per playbook
@@ -137,6 +143,7 @@ hindsight-guild/
 │   ├── paid_media_sweep/ ops_qa_sweep/ snapshot_mongo/
 │   ├── substack_publisher/ substack_publish_sweep/      # publishing + stuck-publish retry
 │   ├── edit_capture_handler/      # Gemini edit classifier (approval Sheet → handler)
+│   ├── mermaid_renderer/          # Node + mmdc + headless chromium → diagram-as-code PNGs
 │   └── slack_approval_handler/
 ├── skills/                        # versioned SKILL.md playbooks (house-style, aeo, …)
 ├── web/                           # React + Vite SPA — the public website (Firebase Hosting)
@@ -159,8 +166,10 @@ Everything below was either weak or stubbed in the first pass; now real:
 |---|---|---|
 | Multi-agent team | 4 independent agents | SequentialAgent pipeline + AgentTool composition |
 | Cross-agent calls | Python imports | A2A protocol via `to_a2a()` |
-| Memory Bank | Guessed import path | Real `VertexAiMemoryBankService` |
-| Rubric harness | 2 hand-rolled Gemini calls | Vertex AI Eval Service, all 6 PointwiseMetric rubrics |
+| Agent memory | Vertex AI Memory Bank (Agent Engine dep) | MongoDB `agent_lessons` — `remember_lesson`/`recall`, no Agent Engine |
+| Mongo access | direct pymongo everywhere | MCP server for agent reads; pymongo for writes (provenance capture) |
+| Vector search | client-side embedding + Voyage key | Atlas **Automated Embedding** (`autoEmbed`), no client embed code/key |
+| Rubric harness | 2 hand-rolled Gemini calls | Vertex AI Eval Service, all 6 PointwiseMetric rubrics + golden-set regression gate |
 | Self-learning loop | inline 2-rubric scoring only | nightly all-6-rubric re-grade (`eval_harness`) + weekly `promotion_gate` |
 | HubSpot / GA / LI handlers | `return None` | Real REST + GAQL + BQ-export queries with tenacity retry |
 | Edit classifier | regex heuristic | Gemini-2.5-Flash structured output |
@@ -193,9 +202,8 @@ python mongo/seed.py                      # collections + vector index
                                           # IAM, + UI → Firebase Hosting
                                           # (see deploy/README.md for per-phase control)
 
-# Find the Agent Engine ID (created via `adk deploy` or Agent Engine console),
-# then expose it to the agent runtime so Memory Bank works:
-export AGENT_ENGINE_ID=<id>
+# Agent memory needs no extra setup — it lives in MongoDB (`agent_lessons`),
+# created by the schema step above. (No Agent Engine / AGENT_ENGINE_ID.)
 
 # Manual:
 #   - Build approval Sheet + paste Apps Script per apps_script/README.md.
@@ -230,6 +238,14 @@ INTEGRATION_TEST=1 pytest tests/integration -q   # against live cloud
 python -m tests.e2e.e2e_smoke     # end-to-end drivers (need a running stack; see tests/e2e/)
 ```
 
+**Eval golden set** (`tests/golden/`) — a curated corpus of unambiguously
+good/bad drafts with expected score bands. `tests/unit/test_eval_golden.py`
+runs cloud-free in CI and guards the *harness contract* (rubric names, 1-5→0..1
+normalization, the `passes_quality_floor` ship/hold gate);
+`tests/integration/test_eval_golden_live.py` (under `INTEGRATION_TEST=1`) runs
+the same corpus through the **real** Vertex judge as the judge-drift gate. Add a
+clear-cut draft + the rubric it sharply exercises to extend coverage.
+
 The headline integration test is `tests/integration/test_reject_then_redraft.py`:
 inject a fresh negative, re-score similar drafts, confirm the rubric grounding
 picks up the new negative and lowers scores on like patterns. The A2A handshake
@@ -242,16 +258,20 @@ skill-evolution) that exercise the live API + agents.
 - **Region:** `us-central1`. Atlas colocated.
 - **Models:** Gemini 3.5 Flash (frontier) for Content + CMO Planner + Lifecycle Email + Positioning + Paid Media + Self-Critique + Reviser; Gemini 3.1 Flash-Lite (cost-efficient) for Research, Review, Analytics, Ops/QA, Customer Voice, ImageBrief, Critique, rubric judge, edit classifier. Both GA on Vertex AI; `gemini-3-pro-preview` was discontinued 2026-03-26.
 - **Secrets:** Never in code. All in Secret Manager.
-- **Mongo access:** Content + Review use `mongo_uri_readonly`; Research, CMO, workers use `mongo_uri_writer`. Atlas enforces server-side.
-- **Telemetry:** Every agent emits one row to `telemetry.actions` via `after_agent_callback`. Outcome slots created at the same time, filled async by `services/outcome_attach`.
-- **Eval:** All 6 rubrics live, inline at draft time (Eval Service) + nightly re-grade by `eval_harness`.
+- **Data stores:** MongoDB Atlas is the **primary store** for transactional, reference, memory (`agent_lessons`), and skill data. BigQuery holds **telemetry/analytics only** (event log + derived views); operational reads default to Mongo (BQ behind opt-in flags).
+- **Mongo access:** Agent **reads** go through the MongoDB **MCP server** (`mongodb-mcp-server`, `--readOnly` for read-scoped agents); **writes** use pymongo so `mongo/history.py` can capture pre-images + provenance. Content + Review use `mongo_uri_readonly`; Research, CMO, workers use `mongo_uri_writer`. Atlas enforces server-side; falls back to pymongo if the MCP subprocess can't launch.
+- **Vector search:** Atlas **Automated Embedding** (`autoEmbed`, `voyage-4-lite` managed server-side) on `customer_voice`. No client-side embedding code and no Voyage API key; on M0 it falls back to a field-filter `find()`.
+- **Telemetry:** Every agent emits one row to Mongo `actions` (+ BigQuery `telemetry.actions`) via `after_agent_callback`. Outcome slots created at the same time, filled async by `services/outcome_attach`.
+- **Eval:** All 6 rubrics live, inline at draft time (Eval Service, sampled via `EVAL_SAMPLE_RATE`) + nightly all-6 re-grade by `eval_harness`. A curated **golden set** (`tests/golden/`) guards the harness contract in CI (cloud-free) and the live judge under `INTEGRATION_TEST=1`; `rubrics.passes_quality_floor` is the opt-in ship/hold gate (`EVAL_QUALITY_FLOOR`).
+- **Skills:** Versioned in Mongo (`skills.versions{}` + `current_version`); the self-critique → promotion-gate → founder-approval loop flips the active version, and `read_body()` reconciles the on-disk `SKILL.md` from Mongo.
 - **Cost cap:** ~$1k/mo at solo-founder scale (Cloud Run scales to zero, Atlas
   M0 free tier; spend is mostly Cloud Build minutes + Vertex AI tokens).
 
 ## Caveats — read before deploying
 
 - **ADK 1.x API drift:** Pinned versions in `pyproject.toml`. If `to_a2a` import path or `LlmAgent.output_key` shape differs in your install, see referenced docs.
-- **Memory Bank requires Agent Engine ID:** Set `AGENT_ENGINE_ID` env var after the agent engine is created. The code raises if not set.
-- **Vertex AI Eval Service usage:** Counted toward your project quota. Synchronous calls at draft time + nightly batch can run several hundred eval calls/day.
+- **MongoDB MCP server needs Node:** The agent image ships Node + `mongodb-mcp-server` so reads run over MCP. Without Node (e.g. a bare dev laptop), agents fall back to pymongo automatically (`MONGODB_USE_MCP=0` forces it).
+- **Atlas Automated Embedding tier:** `autoEmbed` vector indexes are in public preview and may require a paid cluster tier; on the M0 free tier `mongodb_vector_search` falls back to a field-filter `find()`.
+- **Vertex AI Eval Service usage:** Counted toward your project quota. Synchronous calls at draft time are sampled (`EVAL_SAMPLE_RATE`, default 0.25) + nightly batch; the live golden-set test (`INTEGRATION_TEST=1`) also spends quota (~6 calls/draft).
 - **Model Armor flag drift:** Floor-settings + template binding flags may differ slightly across `gcloud` versions. Verify against the docs linked in `scripts/create_model_armor_template.sh`.
 - **A2A service auth:** Deployed with `--no-allow-unauthenticated`. Configure caller IAM bindings (`gcloud run services add-iam-policy-binding`) so workers can invoke agents.

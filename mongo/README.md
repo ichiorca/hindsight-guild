@@ -57,9 +57,15 @@ The actual Mongo content lives here, in `mongo/data/`.
 | `experiments` | CMO Planner (find running + decided), Drift detector (upsert investigation), Outcome attach (transition state) | no | Experiment registry — the unit of learning |
 | `approvals` | Edit-capture handler (upsert by telemetry_id), CMO planner (history) | no | Approval records per telemetry_id |
 
-Vector search index: `customer_voice.customer_voice_vector` (1024 dims, cosine,
-Voyage AI `voyage-3`). M0 free tier allows exactly one — that's why it lives
-on `customer_voice` and the other collections use exact-match indexes.
+Vector search index: `customer_voice.customer_voice_vector`, defined with Atlas
+**Automated Embedding** (`type: autoEmbed`, model `voyage-4-lite`, managed
+server-side by Atlas — see `mongo/schema.py`). We index the `text` field
+directly; Atlas embeds it on insert and embeds the query string on
+`$vectorSearch` — there is no client-side embedding code and no Voyage API key.
+The M0 free tier allows exactly one search index, which is why it lives on
+`customer_voice` and the other collections use exact-match indexes. (Automated
+Embedding is in public preview and may require a paid tier; on M0 the
+`mongodb_vector_search` tool falls back to a plain field-filter `find()`.)
 
 ## MongoDB MCP server — what tools it exposes
 
@@ -73,10 +79,10 @@ the following MCP tools per its protocol:
 | `aggregate` | pipeline stages | yes |
 | `count` | count documents | yes |
 | `distinct` | distinct values for a field | yes |
-| `vector-search` | semantic search; **auto-embeds the query via Voyage AI** | yes |
+| `vector-search` | semantic search; **Atlas auto-embeds the query server-side** | yes |
 | `list-collections` | enumerate | yes |
 | `list-indexes` | enumerate | yes |
-| `insert-one` / `insert-many` | inserts; **auto-embeds configured text fields on insert** | no |
+| `insert-one` / `insert-many` | inserts; **Atlas auto-embeds the indexed `text` field on insert** | no |
 | `update-one` / `update-many` | updates | no |
 | `delete-one` / `delete-many` | deletes | no |
 | `create-collection` | create | no |
@@ -88,21 +94,26 @@ Per-agent scope is enforced THREE ways:
 2. MCP server `--readOnly` flag (process-level).
 3. Tool Hub policy (Phase 2; deferred — see `tool_hub/MIGRATE.md`).
 
-## Auto-embedding via Voyage AI
+## Auto-embedding via Atlas Automated Embedding
 
-The MongoDB MCP server's Winter 2026 feature embeds text fields automatically
-on insert when the server is configured with an embedding provider. We point
-it at Voyage AI (`voyage-3`, 1024 dims) — matches our vector search index.
+Embeddings are **managed entirely by Atlas**, not by the application. The
+`customer_voice_vector` index is declared with `type: autoEmbed` (model
+`voyage-4-lite`), so Atlas embeds the `text` field on insert and embeds the
+query string at `$vectorSearch` time — server-side, with a model it manages.
 
-Configuration is via env vars on the MCP server subprocess:
+Consequences:
+- **No client-side embedding code** and **no Voyage API key** in the app. There
+  is no `MDB_MCP_EMBEDDING_PROVIDER` / `MDB_MCP_VOYAGE_API_KEY` to set; the only
+  env var the MCP server needs is the connection string.
+- Inserts pass plain text; `$vectorSearch` queries pass plain text (a `query`,
+  not a precomputed `queryVector`). See
+  `agents/_mongodb_tools.mongodb_vector_search`.
+
 ```
 MDB_MCP_CONNECTION_STRING=<from Secret Manager>
-MDB_MCP_EMBEDDING_PROVIDER=voyageai
-MDB_MCP_VOYAGE_API_KEY=<from Secret Manager>
-MDB_MCP_EMBED_FIELDS_customer_voice=text
 ```
 
-See `mongo/mcp_server.py` for how `agents/_mcp.py` injects these.
+See `mongo/mcp_server.py:build_env()` for how `agents/_mcp.py` injects this.
 
 ## Quick start
 

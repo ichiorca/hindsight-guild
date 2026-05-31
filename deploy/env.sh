@@ -105,7 +105,6 @@ SECRETS_FOR_AGENTS=(
   substack_api_key
   substack_publication_host
   substack_publication_id
-  voyage_api_key
   edit_capture_handler_url
   substack_publisher_url
 )

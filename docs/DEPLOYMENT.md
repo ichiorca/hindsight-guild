@@ -111,7 +111,6 @@ printf '%s' 'THE-REAL-VALUE' | gcloud secrets versions add <name> --data-file=- 
 | Secret | Needed for | Required? |
 |---|---|---|
 | `mongo_uri_readonly`, `mongo_uri_writer` | all DB access | **yes** (step 5 sets these) |
-| `voyage_api_key` | MongoDB vector auto-embed | recommended |
 | `slack_webhook_url` | CMO planner approvals → Slack | if using Slack |
 | `ga4_property_id`, `hubspot_api_token` | outcome attribution | if using those sources |
 | `google_ads_developer_token`, `google_ads_client_id`, `google_ads_client_secret`, `google_ads_refresh_token`, `google_ads_login_customer_id` | paid-media + Ads attribution | if using Google Ads |
