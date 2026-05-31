@@ -22,6 +22,29 @@ telemetry/analytics.
 It runs **lean** — a hard **cost cap** ($1k/mo at solo-founder scale), not a
 permission to ship stubs.
 
+## MongoDB-native architecture
+
+**MongoDB Atlas is the AI data layer** — not a cache or a side store, but the
+primary system of record the whole guild reasons over. BigQuery holds telemetry
+only; everything operational, referential, remembered, and learned lives in
+Atlas.
+
+![Architecture — MongoDB Atlas as the AI data layer for the agent guild](docs/architecture-mongodb.png)
+
+How every layer leans on the **MongoDB AI stack**:
+
+| Capability | How Hindsight Guild uses it |
+|---|---|
+| **Atlas as primary store** | All transactional + reference data: `actions`, `approvals`, `experiments`, `signals`, `outcomes`, `customer_voice`, `messaging_library`, `negative_examples`. The approval queue, drafting, and skills all read Atlas first. |
+| **MongoDB MCP Server** | **Every agent read goes through the MCP server** (`mongodb-mcp-server`, `--readOnly` for read-scoped agents) — the LLMs query Atlas as a first-class tool. Writes use the driver so `history.*` can capture provenance. |
+| **Atlas Vector Search + Automated Embedding** | Semantic search over `customer_voice` with **Atlas-managed embeddings** (`autoEmbed`, Voyage model, server-side) — text in, results out, **no external embedding API or key**. |
+| **Agent memory** | The `agent_lessons` collection *is* the institutional memory — `remember_lesson` / `recall` per ICP, channel, campaign, and skill. (Replaces Vertex Memory Bank entirely.) |
+| **Versioned skills + self-learning** | Skills live in Atlas as `versions{}` + `current_version`; the self-critique → promotion-gate → approval loop **mutates the active version in Mongo**, then reconciles `SKILL.md` from it. |
+| **Provenance / history** | Every write captures a pre-image in `history.*` for time-travel and audit — the learning loop is fully traceable in Atlas. |
+
+> BigQuery (`telemetry.*`) is **analytics-only** and read behind opt-in flags;
+> the operational ground truth is always MongoDB.
+
 ## How the agents work as a team
 
 ```

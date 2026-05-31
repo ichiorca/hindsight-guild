@@ -1,0 +1,44 @@
+%%{init: {"look": "handDrawn", "theme": "default"}}%%
+flowchart TB
+  classDef mongo fill:#00ED64,stroke:#00684A,stroke-width:2px,color:#001E2B;
+  classDef ext fill:#EEF2F7,stroke:#94A3B8,color:#0F172A;
+  classDef dim fill:#FFFFFF,stroke:#CBD5E1,color:#64748B,stroke-dasharray:6 5;
+
+  Founder["Solo Founder"]:::ext
+  Signals["Signal Watcher (HN, Reddit, RSS)"]:::ext
+
+  subgraph GUILD["Gemini Agent Guild  —  ADK 1.x + A2A protocol"]
+    direction LR
+    PIPE["Drafting pipeline: Research -> Content -> Review -> Critique -> Revise"]:::ext
+    SPEC["Specialists: CMO, Paid, Lifecycle, AEO, Positioning, Voice, Ops"]:::ext
+  end
+
+  subgraph MDB["MongoDB Atlas  —  the AI data layer (primary system of record)"]
+    direction TB
+    MCP["MongoDB MCP Server  —  every agent read (--readOnly scoped)"]:::mongo
+    VS["Atlas Vector Search + Automated Embedding (Voyage, server-side)"]:::mongo
+    OPS["Operational: actions, approvals, experiments, signals, outcomes"]:::mongo
+    REF["Reference: customer_voice, messaging_library, negative_examples"]:::mongo
+    MEM["Agent memory: agent_lessons (remember / recall)"]:::mongo
+    SKILL["Versioned skills: versions + current_version + promotion"]:::mongo
+    HIST["Provenance: history.* pre-images on every write"]:::mongo
+  end
+
+  VTX["Vertex AI: Gemini, Eval Service (6 rubrics), Imagen, Model Armor"]:::ext
+  BQ["BigQuery  —  telemetry / analytics ONLY"]:::dim
+
+  Founder --> PIPE
+  Signals --> PIPE
+  GUILD -->|"reads via MCP"| MCP
+  GUILD -->|"writes with provenance"| OPS
+  PIPE -->|"semantic search"| VS
+  SPEC -->|"recall / remember"| MEM
+  PIPE -->|"load current_version"| SKILL
+  OPS --> HIST
+  SKILL --> HIST
+  VTX -->|"eval scores land in Mongo"| OPS
+  GUILD <-->|"Gemini + Eval + Armor"| VTX
+  OPS -.->|"telemetry dual-write"| BQ
+
+  style MDB fill:#E9FBF1,stroke:#00684A,stroke-width:3px,color:#00432A
+  style GUILD fill:#F5F7FA,stroke:#64748B,stroke-width:2px,color:#0F172A

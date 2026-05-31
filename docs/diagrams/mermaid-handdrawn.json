@@ -1,0 +1,5 @@
+{
+  "look": "handDrawn",
+  "theme": "default",
+  "flowchart": { "curve": "basis", "nodeSpacing": 55, "rankSpacing": 70, "padding": 12 }
+}
