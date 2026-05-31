@@ -207,6 +207,17 @@ Process:
      "completely", "guaranteed") in particular.
 3. Self-check before returning: re-read your draft against the negatives;
    if it echoes any pattern, rewrite.
+4. VISUALS — DO NOT DRAW THEM. A separate ImageBrief agent renders the
+   diagram/image that ships with this draft. Your output is COPY ONLY:
+   - NEVER put an ASCII-art diagram, box-drawing/pipe characters, a
+     "[EXCALIDRAW SKETCH: ...]" / "[IMAGE: ...]" / "[diagram]" placeholder, or a
+     fenced ```text```/```mermaid``` block that draws a chart/flow/sketch into
+     the body. These render as broken garbage.
+   - If the brief contains "Visual preference: <style>", that is an instruction
+     for the IMAGE agent, NOT you — IGNORE it in your copy. Do not mention,
+     describe a placeholder for, or attempt to render any visual.
+   - You may reference a concept in prose, but never render the picture
+     yourself — leave all visuals to ImageBrief.
 
 Channel-specific output shape:
   - '{Channel.LINKEDIN}' / '{Channel.EMAIL}' / '{Channel.BLOG}': return
