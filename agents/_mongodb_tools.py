@@ -44,6 +44,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from bson import Decimal128, ObjectId
 from google.adk.tools import FunctionTool
 from google.genai import types
 
@@ -537,16 +538,38 @@ def make_mongodb_tools(mode: Literal["read", "write"], *,
     return tools
 
 
+def _jsonable(value: Any) -> Any:
+    """Recursively coerce Mongo/BSON values into JSON-serializable forms.
+
+    ADK passes tool results back to the model as JSON; a raw ``ObjectId`` (or
+    ``datetime`` / ``Decimal128`` / bytes) ANYWHERE in a document — not just at
+    the top-level ``_id`` — makes that serialization raise
+    ``PydanticSerializationError`` and the agent run dies with an empty result.
+    (Hit in prod: ``customer_voice.signal_id`` is an ObjectId, surfaced by
+    ``mongodb_vector_search`` on signal-triggered drafts.) Walk nested
+    dicts/lists and convert the offenders."""
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Decimal128):
+        return str(value)
+    if isinstance(value, (bytes, bytearray)):
+        return None  # don't ship binary blobs back to the model
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_jsonable(v) for v in value]
+    return value
+
+
 def _stringify_id(doc: dict | None) -> dict | None:
-    """Mongo ObjectIds aren't JSON-serializable; ADK passes tool results
-    back to the LLM as JSON, so stringify before returning. Same shape;
-    just ``_id`` becomes a string."""
+    """JSON-safe a Mongo document for return to the LLM. Recursively converts
+    ObjectId / datetime / Decimal128 / bytes, including nested and non-``_id``
+    fields (named for history; it does more than ``_id`` now)."""
     if not doc:
         return doc
-    if "_id" in doc:
-        doc = dict(doc)
-        doc["_id"] = str(doc["_id"])
-    return doc
+    return _jsonable(doc)
 
 
 # ---------------------------------------------------------------------------
