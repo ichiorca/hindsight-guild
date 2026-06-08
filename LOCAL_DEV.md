@@ -451,6 +451,55 @@ AEO_LIVE_TEST=1 MONGO_URI_DIRECT="mongodb://localhost:27017" \
 needs a Developer-API model. `AEO_SKIP=1` turns the loop into a pass-through
 (useful when debugging the rest of the pipeline).
 
+## Testing the closed-loop learning / skill evolution (PRD-03)
+
+The full self-learning loop — founder edits + low-scoring drafts → miners /
+Self-Critique Agent → candidate version → founder accept → promotion gate →
+founder approve → `current_version` flips → `SKILL.md` reconciles on disk — is
+driven end-to-end by `tests/e2e/e2e_skill_evolution.py` (14 phases). It covers
+both halves of self-learning and both LLM directions:
+
+- **Agent-skill path (real Gemini):** Phase 3 self-critique *detects* a planted
+  cross-channel pattern; Phases 4–9 accept → gate → approve → disk reconcile;
+  Phase 6 exercises all 4 cross-channel gate downgrade reasons.
+- **Deterministic miner pipeline (Phase 12, no LLM):** runs the real
+  `self_critique_runner.run_once()` over seeded `approvals` edits + rejects and
+  asserts the voice + negative miners produce the expected proposals, persist
+  to `house-style` / `review_agent` / `negative_examples`, **dedup** on re-run,
+  and honor the founder-decision **cooldown**.
+- **Silent-pass (Phase 13, real Gemini):** seeds pattern-free telemetry and
+  asserts the Self-Critique Agent writes **no** proposal (no false positives) —
+  the complement of Phase 3.
+
+```bash
+# Docker Mongo up, .env with GOOGLE_API_KEY. LOCAL_DEV=1 is the bootstrap default.
+python -m tests.e2e.e2e_skill_evolution                 # all phases
+python -m tests.e2e.e2e_skill_evolution --phases 0,1,2  # no-LLM subset (seed + derive)
+python -m tests.e2e.e2e_skill_evolution --keep-sandbox --keep-mongo-on-fail
+```
+
+**No stubs.** BigQuery is the telemetry system of record in every deployed
+environment and stays primary there. Locally there is no BigQuery, so the three
+telemetry-reading services in this loop fall back to a Mongo aggregation over
+the dual-written `actions` collection (`shared/telemetry_reads.py`), gated on
+`bigquery_client() is None`:
+
+| Service | Reads | Local fallback |
+|---------|-------|----------------|
+| `services/derive_track_records` | `telemetry.actions` rollups | `skill_track_records_rollup` / `agent_skill_track_records_rollup` |
+| `services/promotion_gate` | per-version + per-channel stats | `version_stats` / `agent_skill_per_channel_stats` |
+| Self-Critique Agent | low-score drafts + founder edits | `recent_skill_telemetry` tool → `recent_skill_evidence` |
+
+So the e2e exercises the **real** production code paths — there is no
+monkeypatching of BigQuery or the gate. The aggregations are byte-faithful to
+the BQ SQL (same rubrics, 30/14-day windows, `$stdDevSamp` for the gate's
+significance z-test), so a promotion decision is identical local vs prod.
+
+The deterministic pieces stay cloud-free in unit tests:
+`tests/unit/test_promotion_gate.py` (MDE / significance / guardrails / version
+flip), `tests/unit/test_skills_loader.py` (versioning + SKILL.md reconcile),
+`agents/_miners/test_miners.py` (voice/negative miners).
+
 ## Cleanup
 
 ```bash
@@ -479,7 +528,7 @@ python -m scripts.local_seed
 |----------------------|-------------------------------------------------------------|
 | `MONGO_URI_DIRECT`   | Bypass Secret Manager, use this URI directly. Required.    |
 | `MONGO_DB`           | Database name (default: `hindsight_guild`).               |
-| `LOCAL_DEV`          | `1` = web_api skips BigQuery init; degrades to empty data.  |
+| `LOCAL_DEV`          | `1` = no BigQuery client; telemetry reads fall back to Mongo `actions` (the dual-written mirror) via `shared/telemetry_reads.py`. BigQuery stays primary in gcloud. |
 | `DRAFTING_FALLBACK`  | `synthetic` = `/api/draft` composes from Mongo when A2A is unreachable. |
 | `PROJECT_ID`         | Required by some modules at import time; any string works locally. |
 | `TELEMETRY_DISABLED` | `1` = agent callbacks skip BQ telemetry writes.             |

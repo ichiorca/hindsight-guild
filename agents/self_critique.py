@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import UTC, datetime
 
 from google.adk.tools import FunctionTool
@@ -29,6 +30,7 @@ from agents._factory import make_llm_agent
 from agents._prompts import SELF_CRITIQUE_INSTRUCTIONS
 from agents._schema_constants import Coll, Status
 from shared.bigquery_helper import bigquery_query
+from shared.clients import bigquery_client
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +40,80 @@ _VALID_CONFIDENCE = ("high", "medium", "low")
 
 # Shared BQ helper — degrades to [] in LOCAL_DEV instead of raising.
 bigquery_query_tool = FunctionTool(func=bigquery_query)
+
+_SAFE_SKILL_ID = re.compile(r"[A-Za-z0-9_\-]+")
+
+
+def recent_skill_telemetry(skill_id: str, lookback_days: int = 14,
+                           max_rows: int = 10) -> dict:
+    """Gather the evidence a self-critique pass reasons over for ONE Skill:
+    recent low-scoring drafts + founder edits.
+
+    Returns ``{"low_score_drafts": [...], "founder_edits": [...], "source":
+    "bq"|"mongo"}``. Each draft carries telemetry_id/channel/skill_version/
+    brand_voice; each edit carries telemetry_id/channel/before_text/
+    after_text/edit_categories.
+
+    BigQuery is the system of record in every deployed environment and is read
+    here. In LOCAL_DEV (no BigQuery client) the identical data is read from the
+    dual-written Mongo ``actions`` + ``approvals`` collections, so the agent
+    has real grounding locally without any test stub. Prefer this over hand-
+    composing ``bigquery_query`` SQL for the standard drafts+edits evidence
+    pull — it matches on both ``skill_id`` (playbook) and ``skills_loaded``
+    (agent_skill), so it serves either branch.
+
+    Args:
+        skill_id: The Skill ``_id`` to gather evidence for.
+        lookback_days: Window (default 14, matching the weekly cadence).
+        max_rows: Cap on rows per list (default 10).
+    """
+    sid = (skill_id or "").strip()
+    if not sid:
+        return {"low_score_drafts": [], "founder_edits": [], "source": "none"}
+
+    # LOCAL_DEV: no BigQuery; read the identical aggregation from Mongo.
+    if bigquery_client() is None:
+        from shared import telemetry_reads
+        ev = telemetry_reads.recent_skill_evidence(
+            sid, lookback_days=lookback_days, max_rows=max_rows)
+        return {**ev, "source": "mongo"}
+
+    # Deployed env: read BigQuery (the telemetry system of record). skill_id is
+    # an internal identifier; bigquery_query takes raw SQL, so constrain the
+    # interpolated value to a safe charset before building the query.
+    if not _SAFE_SKILL_ID.fullmatch(sid):
+        return {"low_score_drafts": [], "founder_edits": [],
+                "source": "bq", "error": "invalid skill_id"}
+    days = int(lookback_days)
+    cap = int(max_rows)
+    drafts_sql = f"""
+    SELECT telemetry_id, channel, skill_version,
+           CAST(JSON_VALUE(eval_scores, '$.brand_voice') AS FLOAT64) AS brand_voice
+    FROM `{PROJECT_ID}.telemetry.actions`
+    WHERE (skill_id = '{sid}' OR '{sid}' IN UNNEST(skills_loaded))
+      AND CAST(JSON_VALUE(eval_scores, '$.brand_voice') AS FLOAT64) < 0.65
+      AND ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
+    ORDER BY ts DESC
+    LIMIT {cap}
+    """
+    edits_sql = f"""
+    SELECT e.telemetry_id, a.channel, e.before_text, e.after_text,
+           e.edit_categories
+    FROM `{PROJECT_ID}.training.edits` e
+    JOIN `{PROJECT_ID}.telemetry.actions` a USING (telemetry_id)
+    WHERE (a.skill_id = '{sid}' OR '{sid}' IN UNNEST(a.skills_loaded))
+      AND e.ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
+    ORDER BY e.ts DESC
+    LIMIT {cap}
+    """
+    return {
+        "low_score_drafts": bigquery_query(drafts_sql, max_rows=cap),
+        "founder_edits": bigquery_query(edits_sql, max_rows=cap),
+        "source": "bq",
+    }
+
+
+recent_skill_telemetry_tool = FunctionTool(func=recent_skill_telemetry)
 
 
 def propose_skill_revision(
@@ -149,7 +225,8 @@ self_critique_agent = make_llm_agent(
     output_key="self_critique",
     skill_id="self_critique_weekly",
     action_type="self_critique_op",
-    extra_tools=[bigquery_query_tool, propose_skill_revision_tool],
+    extra_tools=[recent_skill_telemetry_tool, bigquery_query_tool,
+                 propose_skill_revision_tool],
     # Meta-agent: it reviews arbitrary agent_skills it doesn't load, so it
     # must be able to read_skill any of them (Tier-1 metadata stays lean).
     unrestricted_skill_reads=True,

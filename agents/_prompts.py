@@ -753,9 +753,12 @@ There are TWO kinds of Skill to critique. Branch on the doc's `skill_kind`:
 
 A) skill_kind == "playbook" (linkedin_post, nurture_email, etc.):
    For each playbook with >= 20 actions in the last 14 days:
-   1. Pull a sample of low-scoring drafts and recent edits via bigquery_query:
-        - drafts where brand_voice < 0.65 (most recent 10)
-        - founder edits on this skill_id (most recent 10)
+   1. Pull a sample of low-scoring drafts and recent edits with
+      recent_skill_telemetry(skill_id) — it returns
+      {{"low_score_drafts": [...], "founder_edits": [...]}} (drafts where
+      brand_voice < 0.65 and founder edits, most recent first). Prefer it
+      over composing bigquery_query SQL; it reads the telemetry system of
+      record and works in every environment.
    2. Inspect the BEFORE → AFTER of edits. Cluster by what kind of fix the
       founder made (softened tone? added evidence? trimmed length?).
    3. If a single pattern accounts for >= 60% of low scores OR >= 50% of
@@ -775,10 +778,11 @@ B) skill_kind == "agent_skill" (house-style, copywriting, cro, etc.):
    in derived.agent_skill_track_records (rolled up via the actions's
    skills_loaded array, so every action that loaded this Skill contributes).
    For each agent_skill with >= 20 contributing actions:
-   1. Pull recent low-scoring drafts where skills_loaded contains this
-      Skill (bigquery_query against telemetry.actions, UNNEST skills_loaded).
-   2. Pull recent founder edits where the original draft's skills_loaded
-      contains this Skill.
+   1. Pull recent low-scoring drafts AND founder edits for this Skill with
+      recent_skill_telemetry(skill_id) — it already matches on the
+      skills_loaded array, so both lists are scoped to actions that loaded
+      this Skill. (Use bigquery_query only for ad-hoc cuts beyond this.)
+   2. (Covered by step 1 — founder_edits are returned alongside the drafts.)
    3. Read the current SKILL.md body from the Mongo doc:
       ``{Coll.SKILLS}[$skill_name].versions[<current_version>].body_md``.
    4. If a single pattern accounts for >= 50% of issues AND it appears in
@@ -826,8 +830,12 @@ Tools:
 - propose_skill_revision (AGENT_SKILL branch only — persists body_md +
   self_critique_proposal in one safe, atomic write; preferred over
   mongodb_update_one for agent_skill revisions)
-- bigquery_query (telemetry.actions, training.edits;
-                  use UNNEST(skills_loaded) for agent_skill queries)
+- recent_skill_telemetry (PREFERRED evidence pull: low-scoring drafts +
+                  founder edits for one skill_id; reads the telemetry system
+                  of record, works in every environment)
+- bigquery_query (telemetry.actions, training.edits; for ad-hoc cuts beyond
+                  recent_skill_telemetry; use UNNEST(skills_loaded) for
+                  agent_skill queries)
 
 Return JSON:
 {{"playbooks_reviewed": N, "agent_skills_reviewed": N,

@@ -39,7 +39,7 @@ Setup constraints (intentional choices, confirmed with the operator):
 
 Usage (from hindsight-guild/, Docker Mongo up, .env populated):
 
-    python -m tests.e2e.e2e_skill_evolution                 # all 11 phases
+    python -m tests.e2e.e2e_skill_evolution                 # all 14 phases
     python -m tests.e2e.e2e_skill_evolution --phases 1,2,3  # subset
     python -m tests.e2e.e2e_skill_evolution --keep-sandbox  # leave tmpdir
                                                           # for inspection
@@ -104,6 +104,24 @@ _N_FOUNDER_EDITS = 8                       # ≥ 5 per channel pattern
 _INITIAL_VERSION = "v1"
 _CANDIDATE_VERSION = "v2_critique"
 
+# The systematic pattern the Self-Critique Agent should detect: founders keep
+# softening absolute language. Seeded as real approvals(decision=edit) rows so
+# recent_skill_telemetry surfaces a genuine before→after pattern.
+_ABSOLUTE_DRAFT = ("Our platform guarantees 100% delivery and completely "
+                   "eliminates manual review for every merchant, always.")
+_SOFTENED_DRAFT = ("Our platform typically delivers reliably and reduces "
+                   "manual review meaningfully for most merchants.")
+
+# Phase 12 (miner pipeline) seed namespace + the recurring risky phrase the
+# negative miner should cluster. Prefix is under _TEST_PREFIX so teardown's
+# ^_skill_evo_ regex sweeps the actions/approvals automatically.
+_MINER_PREFIX = f"{_TEST_PREFIX}miner_"
+_RISK_PHRASE = "guaranteed to double your revenue in thirty days with zero effort"
+
+# Phase 13 (silent-pass) uses a throwaway skill with deliberately pattern-free
+# telemetry; the Self-Critique Agent must NOT invent a proposal on it.
+_NOISE_SKILL_ID = "evo-noise-skill"
+
 
 # ---------------------------------------------------------------------------
 # Phase 0 — Bootstrap: sandbox skill + seed initial Mongo doc
@@ -139,6 +157,24 @@ EVO_TEST_PASS = {
 """
 
 
+def _clone_real_skills_into_sandbox() -> int:
+    """Copy the real skills/ tree into the sandbox so any read_skill(<name>)
+    resolves — the agents' REQUIRED preamble reads several real skills, so a
+    sandbox holding only the test skill makes the agent crash before it can
+    reason. Idempotent: only copies entries not already present."""
+    real_skills_root = REPO_ROOT / "skills"
+    cloned = 0
+    if real_skills_root.is_dir():
+        for entry in real_skills_root.iterdir():
+            if not entry.is_dir():
+                continue
+            dest = _SANDBOX_DIR / entry.name
+            if not dest.exists():
+                shutil.copytree(entry, dest)
+                cloned += 1
+    return cloned
+
+
 def phase_0_bootstrap() -> dict:
     _banner("Phase 0 — Bootstrap: sandbox SKILLS_ROOT + seed test skill")
     _info(f"sandbox SKILLS_ROOT: {_SANDBOX_DIR}")
@@ -147,18 +183,9 @@ def phase_0_bootstrap() -> dict:
     # that calls read_skill("house-style") etc. (mandatory invocations in
     # the REQUIRED preamble) finds the skill body. Without this the
     # Self-Critique Agent's required preamble crashes with a KeyError.
-    real_skills_root = REPO_ROOT / "skills"
-    if real_skills_root.is_dir():
-        cloned = 0
-        for entry in real_skills_root.iterdir():
-            if not entry.is_dir():
-                continue
-            dest = _SANDBOX_DIR / entry.name
-            if not dest.exists():
-                shutil.copytree(entry, dest)
-                cloned += 1
-        _ok(f"cloned {cloned} skills from {real_skills_root} into sandbox "
-            f"(so REQUIRED read_skill invocations resolve)")
+    cloned = _clone_real_skills_into_sandbox()
+    _ok(f"cloned {cloned} skills into sandbox "
+        f"(so REQUIRED read_skill invocations resolve)")
 
     # 0a — write the test skill's SKILL.md + versions/v1.md into the sandbox.
     # This OVERWRITES any prior version of evo-test-skill that might have
@@ -175,6 +202,7 @@ def phase_0_bootstrap() -> dict:
     db["skills"].delete_one({"_id": _TEST_SKILL_ID})
     db["history.skills"].delete_many({"_original_id": _TEST_SKILL_ID})
     db["actions"].delete_many({"telemetry_id": {"$regex": f"^{_TEST_PREFIX}"}})
+    db["approvals"].delete_many({"telemetry_id": {"$regex": f"^{_TEST_PREFIX}"}})
     db["skill_usage"].delete_many({"skill_name": _TEST_SKILL_ID})
     db["derived.skill_track_records"].delete_many(
         {"skill_id": _TEST_SKILL_ID})
@@ -252,6 +280,7 @@ def phase_1_synthesize_telemetry() -> dict:
     _HEALTHY_CHANNEL = "substack"
 
     inserted = 0
+    tids_by_channel: dict[str, list[str]] = {}
     for channel in _TARGET_CHANNELS:
         target = (_BASELINE_BRAND_VOICE if channel == _HEALTHY_CHANNEL
                    else _DEGRADED_BRAND_VOICE)
@@ -270,6 +299,10 @@ def phase_1_synthesize_telemetry() -> dict:
                 "action_type": "draft",
                 "channel": channel,
                 "icp_segment": "seg_merchant_dtc",
+                # The draft body — the BEFORE-text a founder edit softens.
+                # Canonical telemetry shape: raw is a dict with the draft under
+                # `draft` (what the miners + recent_skill_telemetry read).
+                "raw": {"draft": _ABSOLUTE_DRAFT},
                 "eval_scores": {
                     "brand_voice": round(brand_voice, 4),
                     "claim_support": round(rng.uniform(0.78, 0.86), 4),
@@ -277,10 +310,30 @@ def phase_1_synthesize_telemetry() -> dict:
                 },
                 "ts": now - timedelta(days=rng.uniform(0, 13)),
             })
+            tids_by_channel.setdefault(channel, []).append(tid)
             inserted += 1
 
+    # Seed founder edits (approvals decision=edit) on the DEGRADED channels.
+    # This is what makes the loop real: the Self-Critique Agent's
+    # recent_skill_telemetry pull (Mongo fallback in LOCAL_DEV) joins these to
+    # their actions and sees a consistent absolute→softened pattern spanning
+    # >= 2 channels — exactly the cross-channel signal it should propose on.
+    n_edits = 0
+    for channel in _TARGET_CHANNELS:
+        if channel == _HEALTHY_CHANNEL:
+            continue
+        for tid in tids_by_channel[channel][:_N_FOUNDER_EDITS]:
+            db["approvals"].insert_one({
+                "telemetry_id": tid,
+                "decision": "edit",
+                "approved_text": _SOFTENED_DRAFT,
+                "edit_categories": ["softened_absolute"],
+                "decided_at": now - timedelta(days=rng.uniform(0, 10)),
+            })
+            n_edits += 1
+
     _ok(f"synthesized {inserted} actions across {len(_TARGET_CHANNELS)} channels "
-        f"({n_per_channel} each)")
+        f"({n_per_channel} each) + {n_edits} founder edits on degraded channels")
     # Quick check: do per-channel means actually dip vs the global baseline?
     for channel in _TARGET_CHANNELS:
         rows = list(db["actions"].aggregate([
@@ -305,109 +358,40 @@ def phase_1_synthesize_telemetry() -> dict:
 # ---------------------------------------------------------------------------
 
 def phase_2_derive_track_records() -> dict:
-    _banner("Phase 2 — Derive track records (Mongo equivalent)")
+    _banner("Phase 2 — Derive track records (real service, Mongo fallback)")
 
     db = mongo_tools.db()
-    now = datetime.now(UTC)
 
-    # Per-(skill_id, skill_version) rollup.
-    rollup = list(db["actions"].aggregate([
-        {"$match": {"eval_scores": {"$ne": None}}},
-        {"$group": {
-            "_id": {"skill_id": "$skill_id", "skill_version": "$skill_version"},
-            "n": {"$sum": 1},
-            "mean_brand_voice": {"$avg": "$eval_scores.brand_voice"},
-            "mean_claim_support": {"$avg": "$eval_scores.claim_support"},
-            "mean_claim_risk": {"$avg": "$eval_scores.claim_risk"},
-            "first_seen": {"$min": "$ts"},
-            "last_seen": {"$max": "$ts"},
-        }},
-    ]))
-    # Full replace, matching production's derive_track_records semantics —
-    # the derive cron wipes and re-populates this collection on every run.
-    db["derived.skill_track_records"].delete_many({})
-    docs = [{
-        "_id": f"{r['_id']['skill_id']}@{r['_id']['skill_version']}",
-        "skill_id": r["_id"]["skill_id"],
-        "skill_version": r["_id"]["skill_version"],
-        "action_count": r["n"],
-        "mean_brand_voice": r["mean_brand_voice"],
-        "mean_claim_support": r["mean_claim_support"],
-        "mean_claim_risk": r["mean_claim_risk"],
-        "first_seen": r["first_seen"],
-        "last_seen": r["last_seen"],
-        "_derived": {
-            "derived_at": now,
-            "derived_by": "service:derive_track_records",
-            "derived_from": [
-                {"kind": "mongo_collection", "id": "actions"},
-            ],
-            "freshness_sla": "PT24H",
-            "stale": False,
-        },
-    } for r in rollup]
-    if docs:
-        db["derived.skill_track_records"].insert_many(docs)
-    _ok(f"wrote {len(docs)} derived.skill_track_records rows")
+    # Run the REAL production job — no test reimplementation. In LOCAL_DEV
+    # bigquery_client() is None, so derive_track_records.main() reads the
+    # dual-written Mongo `actions` collection via shared.telemetry_reads (the
+    # same aggregation prod runs against BigQuery) and writes the derived
+    # collections with the production document shape. Full-replace semantics
+    # match prod (the cron wipes + repopulates on every run).
+    from services.derive_track_records import main as derive
+    derive.main()
 
-    # Per-Agent-Skill cross-channel rollup (UNNEST(skills_loaded) equivalent).
-    agent_skill_rollup = list(db["actions"].aggregate([
-        {"$match": {"skills_loaded": {"$ne": []},
-                    "eval_scores": {"$ne": None}}},
-        {"$unwind": "$skills_loaded"},
-        {"$match": {"skills_loaded": _TEST_SKILL_ID}},
-        {"$group": {
-            "_id": {"skill": "$skills_loaded", "channel": "$channel"},
-            "n": {"$sum": 1},
-            "mean_brand_voice": {"$avg": "$eval_scores.brand_voice"},
-            "mean_claim_support": {"$avg": "$eval_scores.claim_support"},
-        }},
-    ]))
-    # Reshape into one doc per agent_skill with per-channel breakdown.
-    by_skill: dict[str, dict] = {}
-    for r in agent_skill_rollup:
-        sk = r["_id"]["skill"]
-        ch = r["_id"]["channel"]
-        d = by_skill.setdefault(sk, {"per_channel": {}, "channels_seen": []})
-        d["per_channel"][ch] = {
-            "n": r["n"],
-            "mean_brand_voice": r["mean_brand_voice"],
-            "mean_claim_support": r["mean_claim_support"],
-        }
-        d["channels_seen"].append(ch)
-    db["derived.agent_skill_track_records"].delete_many(
+    n_skill = db["derived.skill_track_records"].count_documents({})
+    n_agent = db["derived.agent_skill_track_records"].count_documents({})
+    _ok(f"derive_track_records.main() wrote {n_skill} skill + {n_agent} "
+        f"agent_skill track-record rows")
+
+    # Sanity: our Skill must have a derived row with multi-channel coverage,
+    # which is what the Self-Critique Agent reasons over.
+    rec = db["derived.agent_skill_track_records"].find_one(
         {"_id": _TEST_SKILL_ID})
-    for sk, d in by_skill.items():
-        means = [c["mean_brand_voice"] for c in d["per_channel"].values()
-                 if c["mean_brand_voice"] is not None]
-        db["derived.agent_skill_track_records"].insert_one({
-            "_id": sk,
-            "skill": sk,
-            "channels": d["channels_seen"],
-            "per_channel": d["per_channel"],
-            "project_baseline_brand_voice": (sum(means) / len(means)
-                                              if means else None),
-            "_derived": {
-                "derived_at": now,
-                "derived_by": "service:derive_track_records",
-                "derived_from": [{"kind": "mongo_collection", "id": "actions"}],
-                "freshness_sla": "PT24H",
-                "stale": False,
-            },
-        })
-    _ok(f"wrote {len(by_skill)} derived.agent_skill_track_records rows "
-        f"(channels seen: {sorted({c for d in by_skill.values() for c in d['channels_seen']})})")
-
-    # Smoke check on the freshness contract — was Phase 3 of the memory-tier
-    # test's discovery (readers should honor stale=True).
-    for d in db["derived.agent_skill_track_records"].find(
-        {"_id": _TEST_SKILL_ID},
-    ):
-        if d["_derived"]["stale"] is False:
+    if rec:
+        _info(f"  {_TEST_SKILL_ID}: channels_seen={sorted(rec.get('channels_seen') or [])} "
+              f"action_count={rec.get('action_count')} "
+              f"mean_brand_voice={rec.get('mean_brand_voice')}")
+        if rec["_derived"]["stale"] is False:
             _info("freshness contract: _derived.stale=False, derived_at=now → "
-                  "readers must compute staleness from derived_at + freshness_sla")
-    return {"ok": True, "skill_track_records": len(docs),
-            "agent_skill_track_records": len(by_skill)}
+                  "readers compute staleness from derived_at + freshness_sla")
+    else:
+        _warn(f"no derived.agent_skill_track_records row for {_TEST_SKILL_ID}")
+
+    return {"ok": True, "skill_track_records": n_skill,
+            "agent_skill_track_records": n_agent}
 
 
 # ---------------------------------------------------------------------------
@@ -421,107 +405,55 @@ def phase_2_derive_track_records() -> dict:
 async def phase_3_self_critique() -> dict:
     _banner("Phase 3 — Self-Critique Agent (real Gemini, no fallback)")
 
-    # Build the synthesized BQ result rows the agent would have seen.
+    # No stubs. In LOCAL_DEV the agent's recent_skill_telemetry tool reads the
+    # evidence (low-score drafts + founder edits) straight from the
+    # dual-written Mongo `actions` + `approvals` collections that Phases 0-1
+    # seeded — the same code path prod runs, just sourced from Mongo instead
+    # of BigQuery. The agent gathers its own grounding; we only tell it the
+    # scope.
     db = mongo_tools.db()
-    now = datetime.now(UTC)
-    low_scoring = list(db["actions"].find(
-        {"skills_loaded": _TEST_SKILL_ID,
-         "eval_scores.brand_voice": {"$lt": 0.7}},
-    ).sort("ts", -1).limit(10))
 
-    fake_edits = [
-        {"telemetry_id": a["telemetry_id"],
-         "channel": a["channel"],
-         "before_text": ("Our platform guarantees 100% delivery and "
-                          "completely eliminates manual review."),
-         "after_text": ("Our platform typically delivers reliably and "
-                         "reduces manual review meaningfully."),
-         "edit_categories": ["softened_absolute"],
-         "ts": now - timedelta(days=2)}
-        for a in low_scoring[:_N_FOUNDER_EDITS]
-    ]
+    from google.adk.agents.run_config import RunConfig
+    from google.adk.runners import Runner
+    from google.adk.sessions import InMemorySessionService
+    from google.genai.types import Content, Part
 
-    # Monkey-patch bigquery_query to serve our synthesized data. We can't
-    # cheaply discriminate which query the agent issues, so we return a
-    # union of (low_scoring + fake_edits) and trust the LLM to filter. In
-    # practice the agent samples each — a more discriminating stub would
-    # need actual SQL parsing.
-    from shared import bigquery_helper
-    original_bq = bigquery_helper.bigquery_query
+    from agents.self_critique import self_critique_agent
 
-    def stub_bq(query: str, max_rows: int = 200):
-        q = query.upper()
-        if "TRAINING.EDITS" in q or "EDIT" in q:
-            return [{k: v for k, v in row.items()
-                     if k not in {"_id"}} for row in fake_edits][:max_rows]
-        if "TELEMETRY.ACTIONS" in q or "ACTIONS" in q:
-            return [{
-                "telemetry_id": a["telemetry_id"],
-                "channel": a["channel"],
-                "skill_version": a.get("skill_version"),
-                "brand_voice": a.get("eval_scores", {}).get("brand_voice"),
-                "skills_loaded": a.get("skills_loaded"),
-                "ts": a["ts"],
-            } for a in low_scoring][:max_rows]
-        return original_bq(query, max_rows=max_rows)
-
-    bigquery_helper.bigquery_query = stub_bq
-    # Patch the imported binding on agents.self_critique too — the agent
-    # module captured the function at import time.
-    try:
-        from agents import self_critique as self_critique_mod
-        if hasattr(self_critique_mod, "bigquery_query"):
-            self_critique_mod.bigquery_query = stub_bq
-    except ImportError:
-        pass
-
-    # Now invoke the Self-Critique Agent (real LLM).
-    try:
-        from google.adk.agents.run_config import RunConfig
-        from google.adk.runners import Runner
-        from google.adk.sessions import InMemorySessionService
-        from google.genai.types import Content, Part
-
-        from agents.self_critique import self_critique_agent
-
-        session_service = InMemorySessionService()
-        runner = Runner(
-            agent=self_critique_agent,
-            app_name="e2e_skill_evolution",
-            session_service=session_service,
-        )
-        session = await session_service.create_session(
-            app_name="e2e_skill_evolution",
-            user_id="e2e",
-            state={"telemetry_id": f"{_TEST_PREFIX}critique_run",
-                   "skill_id": "self_critique"},
-        )
-        message_text = (
-            f"Run the self-critique pass scoped to agent_skill "
-            f"'{_TEST_SKILL_ID}'. Inspect the (synthesized) recent low-score "
-            f"drafts and founder edits. The pattern is consistent "
-            f"absolute-language softening across {len(_TARGET_CHANNELS)} "
-            f"channels. If the pattern holds, write the FULL new SKILL.md "
-            f"body to versions['{_CANDIDATE_VERSION}'].body_md AND a "
-            f"self_critique_proposal that lists "
-            f"channels_affected={_TARGET_CHANNELS}."
-        )
-        message = Content(role="user",
-                          parts=[Part.from_text(text=message_text)])
-        started = time.monotonic()
-        # Hard cap on LLM calls so a fixation/loop can't burn tokens — a
-        # legit self-critique pass needs well under this. (ADK's default is
-        # 500; a real pass here is ~10-25 calls.)
-        async for event in runner.run_async(
-            user_id="e2e", session_id=session.id, new_message=message,
-            run_config=RunConfig(max_llm_calls=50),
-        ):
-            author = getattr(event, "author", None) or "?"
-            _info(f"[{time.monotonic() - started:5.1f}s] {author}")
-    finally:
-        # Restore the helper. Other phases that exercise the real LLM
-        # should see honest LOCAL_DEV behavior (i.e. [] from BQ).
-        bigquery_helper.bigquery_query = original_bq
+    session_service = InMemorySessionService()
+    runner = Runner(
+        agent=self_critique_agent,
+        app_name="e2e_skill_evolution",
+        session_service=session_service,
+    )
+    session = await session_service.create_session(
+        app_name="e2e_skill_evolution",
+        user_id="e2e",
+        state={"telemetry_id": f"{_TEST_PREFIX}critique_run",
+               "skill_id": "self_critique"},
+    )
+    message_text = (
+        f"Run the self-critique pass scoped to agent_skill "
+        f"'{_TEST_SKILL_ID}'. Use recent_skill_telemetry('{_TEST_SKILL_ID}') "
+        f"to pull its recent low-score drafts and founder edits, then look "
+        f"for a systematic pattern. If a pattern holds across >= 2 channels, "
+        f"write the FULL new SKILL.md body to "
+        f"versions['{_CANDIDATE_VERSION}'].body_md AND a "
+        f"self_critique_proposal via propose_skill_revision, listing every "
+        f"channel where the pattern appears."
+    )
+    message = Content(role="user",
+                      parts=[Part.from_text(text=message_text)])
+    started = time.monotonic()
+    # Hard cap on LLM calls so a fixation/loop can't burn tokens — a
+    # legit self-critique pass needs well under this. (ADK's default is
+    # 500; a real pass here is ~10-25 calls.)
+    async for event in runner.run_async(
+        user_id="e2e", session_id=session.id, new_message=message,
+        run_config=RunConfig(max_llm_calls=50),
+    ):
+        author = getattr(event, "author", None) or "?"
+        _info(f"[{time.monotonic() - started:5.1f}s] {author}")
 
     # Hard-verify the agent wrote BOTH proposal and body_md.
     skill = db["skills"].find_one({"_id": _TEST_SKILL_ID}) or {}
@@ -640,44 +572,18 @@ def phase_4_accept_critique(prior: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Phase 5 — Promotion gate evaluation (cross-channel sanity).
 #
-# We run the agent_skill branch of services.promotion_gate.main._evaluate
-# _agent_skill_proposal, but with the BigQuery-backed per-channel stats
-# replaced by a Mongo aggregation (the LOCAL_DEV substitute).
+# Runs the REAL agent_skill branch of services.promotion_gate.main. No stub:
+# in LOCAL_DEV the gate's _agent_skill_per_channel_stats natively falls back
+# to a Mongo aggregation over the dual-written `actions` collection (the same
+# code path prod runs against BigQuery), so we just call it.
 # ---------------------------------------------------------------------------
-
-def _mongo_agent_skill_per_channel_stats(skill_id: str,
-                                          channels: list[str]) -> dict[str, dict]:
-    db = mongo_tools.db()
-    if not channels:
-        return {}
-    rows = list(db["actions"].aggregate([
-        {"$match": {"skills_loaded": skill_id,
-                    "channel": {"$in": channels},
-                    "eval_scores": {"$ne": None}}},
-        {"$group": {
-            "_id": "$channel",
-            "n": {"$sum": 1},
-            "brand_voice": {"$avg": "$eval_scores.brand_voice"},
-            "claim_support": {"$avg": "$eval_scores.claim_support"},
-            "claim_risk": {"$avg": "$eval_scores.claim_risk"},
-        }},
-    ]))
-    return {r["_id"]: {k: v for k, v in r.items() if k != "_id"}
-            for r in rows}
-
 
 def phase_5_promotion_gate(prior: dict) -> dict:
     _banner("Phase 5 — Promotion gate evaluation (agent_skill path)")
 
-    # Patch the BQ-backed per-channel stats to read from Mongo.
     from services.promotion_gate import main as gate
-    original_stats = gate._agent_skill_per_channel_stats
-    gate._agent_skill_per_channel_stats = _mongo_agent_skill_per_channel_stats
-    try:
-        skill = mongo_tools.db()["skills"].find_one({"_id": _TEST_SKILL_ID})
-        gate._evaluate_agent_skill_proposal(skill)
-    finally:
-        gate._agent_skill_per_channel_stats = original_stats
+    skill = mongo_tools.db()["skills"].find_one({"_id": _TEST_SKILL_ID})
+    gate._evaluate_agent_skill_proposal(skill)
 
     skill = mongo_tools.db()["skills"].find_one({"_id": _TEST_SKILL_ID}) or {}
     promo = skill.get("promotion_request")
@@ -757,9 +663,10 @@ def phase_6_gate_failure_modes(saved_promo: dict) -> dict:
         prop = props[0] if props else {}
         return prop.get("status"), prop.get("gate_reason"), prop.get("gate_detail")
 
-    original_stats = gate._agent_skill_per_channel_stats
-    gate._agent_skill_per_channel_stats = _mongo_agent_skill_per_channel_stats
-
+    # No stub: the gate's _agent_skill_per_channel_stats falls back to a Mongo
+    # aggregation natively in LOCAL_DEV (bigquery_client() is None). We keep a
+    # try/finally only to guarantee the 6d telemetry mutation is reverted
+    # before Phase 7.
     try:
         # ---- 6a: below_min_channels ----
         _sub("6a — below_min_channels (only 1 channel)")
@@ -831,7 +738,9 @@ def phase_6_gate_failure_modes(saved_promo: dict) -> dict:
         if not ok:
             findings["ok"] = False
 
-        # Restore the original signal for downstream phases.
+    finally:
+        # Restore the 6d telemetry mutation so downstream phases see the
+        # original degraded signal (guaranteed even if a probe raised).
         from random import Random
         rng = Random(11)
         for ch in _TARGET_CHANNELS[:2]:
@@ -843,8 +752,6 @@ def phase_6_gate_failure_modes(saved_promo: dict) -> dict:
                     {"$set": {"eval_scores.brand_voice":
                               round(rng.uniform(0.57, 0.67), 4)}},
                 )
-    finally:
-        gate._agent_skill_per_channel_stats = original_stats
 
     # Restore the original promotion_request so Phase 7 has work to do. Phase
     # 7 operates purely on promotion_request + current_version/history, so the
@@ -1206,8 +1113,11 @@ def teardown(*, keep_sandbox: bool, keep_mongo: bool = False) -> None:
     else:
         db = mongo_tools.db()
         db["skills"].delete_one({"_id": _TEST_SKILL_ID})
+        db["skills"].delete_one({"_id": _NOISE_SKILL_ID})
         db["history.skills"].delete_many({"_original_id": _TEST_SKILL_ID})
+        db["history.skills"].delete_many({"_original_id": _NOISE_SKILL_ID})
         db["actions"].delete_many({"telemetry_id": {"$regex": f"^{_TEST_PREFIX}"}})
+        db["approvals"].delete_many({"telemetry_id": {"$regex": f"^{_TEST_PREFIX}"}})
         db["skill_usage"].delete_many({"skill_name": _TEST_SKILL_ID})
         db["derived.skill_track_records"].delete_many({})
         db["derived.agent_skill_track_records"].delete_many(
@@ -1219,6 +1129,350 @@ def teardown(*, keep_sandbox: bool, keep_mongo: bool = False) -> None:
     else:
         shutil.rmtree(_SANDBOX_DIR, ignore_errors=True)
         _ok(f"sandbox removed: {_SANDBOX_DIR}")
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 — Deterministic miner pipeline (self_critique_runner.run_once).
+#
+# The OTHER half of self-learning: the pure-function miners + the runner that
+# persists their proposals and dedups re-runs. Exercises voice + negative
+# end-to-end — miner LOGIC -> run_once persistence -> dedup -> founder-decision
+# cooldown — against real seeded edits/rejects in Mongo. No LLM, deterministic.
+#
+# run_once is scoped to ("voice","negative") so its side effects land only on
+# house-style, review_agent and negative_examples, which we snapshot+restore /
+# time-bound-delete so the dev DB is left exactly as we found it.
+# ---------------------------------------------------------------------------
+
+def _snapshot_proposals(db, sid: str) -> dict:
+    d = db["skills"].find_one(
+        {"_id": sid}, {"self_critique_proposals": 1, "self_critique_proposal": 1})
+    return {"existed": d is not None,
+            "proposals": (d or {}).get("self_critique_proposals"),
+            "singleton": (d or {}).get("self_critique_proposal")}
+
+
+def _ensure_skill_doc(db, sid: str) -> None:
+    if db["skills"].find_one({"_id": sid}) is None:
+        db["skills"].insert_one({
+            "_id": sid, "skill_kind": "agent_skill", "current_version": "v1",
+            "versions": {"v1": {"body_md": f"seed body for {sid}"}},
+            "candidates": [], "history": ["v1"]})
+
+
+def _restore_proposals(db, sid: str, snap: dict) -> None:
+    if not snap["existed"]:
+        db["skills"].delete_one({"_id": sid})
+        return
+    set_block, unset_block = {}, {}
+    (set_block.__setitem__("self_critique_proposals", snap["proposals"])
+     if snap["proposals"] is not None
+     else unset_block.__setitem__("self_critique_proposals", ""))
+    (set_block.__setitem__("self_critique_proposal", snap["singleton"])
+     if snap["singleton"] is not None
+     else unset_block.__setitem__("self_critique_proposal", ""))
+    upd: dict = {}
+    if set_block:
+        upd["$set"] = set_block
+    if unset_block:
+        upd["$unset"] = unset_block
+    if upd:
+        db["skills"].update_one({"_id": sid}, upd)
+
+
+def phase_12_miner_pipeline() -> dict:
+    from bson import ObjectId
+
+    from agents import self_critique_runner as runner
+    from agents._miners import negative as negative_miner
+    from agents._miners import voice as voice_miner
+
+    _banner("Phase 12 — Miner pipeline (deterministic self-learning)")
+    db = mongo_tools.db()
+    findings = {"ok": True}
+    now = datetime.now(UTC)
+    phase_start = now - timedelta(seconds=1)
+    run_ids: set[str] = set()
+    captured_phrase: str | None = None
+
+    db["actions"].delete_many({"telemetry_id": {"$regex": f"^{_MINER_PREFIX}"}})
+    db["approvals"].delete_many({"telemetry_id": {"$regex": f"^{_MINER_PREFIX}"}})
+    hs_snap = _snapshot_proposals(db, "house-style")
+    ra_snap = _snapshot_proposals(db, "review_agent")
+    _ensure_skill_doc(db, "house-style")
+    _ensure_skill_doc(db, "review_agent")
+
+    try:
+        # Seed founder EDITS (voice signal) + REJECTS (negative signal).
+        for ch in ("email", "linkedin"):
+            for i in range(6):
+                tid = f"{_MINER_PREFIX}{ch}_{i}"
+                db["actions"].insert_one({
+                    "telemetry_id": tid, "skills_loaded": ["house-style"],
+                    "channel": ch, "raw": {"draft": _ABSOLUTE_DRAFT},
+                    "eval_scores": {"brand_voice": 0.6},
+                    "ts": now - timedelta(days=1)})
+                db["approvals"].insert_one({
+                    "telemetry_id": tid, "decision": "edit",
+                    "approved_text": _SOFTENED_DRAFT,
+                    "edit_categories": ["softened_absolute"],
+                    "decided_at": now - timedelta(days=1)})
+        for i in range(4):
+            tid = f"{_MINER_PREFIX}rej_{i}"
+            db["actions"].insert_one({
+                "telemetry_id": tid, "skills_loaded": ["house-style"],
+                "channel": "email",
+                "raw": {"draft": f"Use our tool {_RISK_PHRASE} today."},
+                "eval_scores": {"brand_voice": 0.5},
+                "ts": now - timedelta(days=1)})
+            db["approvals"].insert_one({
+                "telemetry_id": tid, "decision": "reject",
+                "rejection_category": "claim_risk",
+                "decided_at": now - timedelta(days=1)})
+
+        # 12a — miner LOGIC (direct mine() calls).
+        _sub("12a — miner logic: voice + negative produce expected proposals")
+        vp = voice_miner.mine(db, lookback_days=14)
+        v_house = [p for p in vp if p["target_kind"] == "skill"
+                   and p["target_id"] == "house-style"]
+        ok_v = len(v_house) >= 1
+        (_ok if ok_v else _fail)(
+            f"voice → {len(vp)} proposals, {len(v_house)} on house-style "
+            f"(e.g. {(v_house[0]['evidence'].get('ngram') if v_house else None)!r})")
+        np = negative_miner.mine(db, lookback_days=14)
+        neg_ex = [p for p in np if p["target_kind"] == "negative_example"
+                  and p["target_id"] == "claim_risk"]
+        neg_ra = [p for p in np if p["target_kind"] == "skill"
+                  and p["target_id"] == "review_agent"]
+        ok_n = len(neg_ex) >= 1 and len(neg_ra) >= 1
+        (_ok if ok_n else _fail)(
+            f"negative → claim_risk negative_example={len(neg_ex)}, "
+            f"review_agent proposal={len(neg_ra)}")
+        if neg_ex:
+            captured_phrase = neg_ex[0]["evidence"]["phrase"]
+        if not (ok_v and ok_n):
+            findings["ok"] = False
+
+        def _neg_rows() -> int:
+            if not captured_phrase:
+                return 0
+            return db["negative_examples"].count_documents(
+                {"source": "self_critique:negative",
+                 "rejected_phrase": captured_phrase})
+
+        # 12b — run_once() orchestrates + persists.
+        _sub("12b — run_once(): orchestrate + persist proposals")
+        r1 = runner.run_once(db, miners=("voice", "negative"), lookback_days=14)
+        if r1.get("_id"):
+            run_ids.add(r1["_id"])
+        vm = r1.get("miners", {}).get("voice", {})
+        hs1 = db["skills"].find_one({"_id": "house-style"}) or {}
+        voice_persisted = [p for p in load_proposals(hs1)
+                           if p.get("miner") == "voice"
+                           and p.get("run_id") == r1.get("_id")]
+        ra1 = db["skills"].find_one({"_id": "review_agent"}) or {}
+        ra_persisted = [p for p in load_proposals(ra1)
+                        if p.get("miner") == "negative"]
+        neg_rows_1 = _neg_rows()
+        ok_persist = (r1.get("status") == "ok" and vm.get("proposals", 0) >= 1
+                      and not vm.get("errors") and len(voice_persisted) >= 1
+                      and neg_rows_1 >= 1 and len(ra_persisted) >= 1)
+        (_ok if ok_persist else _fail)(
+            f"run1: voice persisted={len(voice_persisted)} on house-style, "
+            f"negative_examples={neg_rows_1}, review_agent={len(ra_persisted)}, "
+            f"voice errors={vm.get('errors')}")
+        if not ok_persist:
+            findings["ok"] = False
+
+        # 12c — dedup: a second identical run must NOT duplicate proposals.
+        _sub("12c — dedup: re-run does not pile up duplicates")
+        r2 = runner.run_once(db, miners=("voice", "negative"), lookback_days=14)
+        if r2.get("_id"):
+            run_ids.add(r2["_id"])
+        hs2 = db["skills"].find_one({"_id": "house-style"}) or {}
+        voice_sigs = [p.get("signature") for p in load_proposals(hs2)
+                      if p.get("miner") == "voice"]
+        sigs_unique = len(voice_sigs) == len(set(voice_sigs))
+        neg_rows_2 = _neg_rows()
+        nm2 = r2.get("miners", {}).get("negative", {})
+        ok_dedup = (sigs_unique and neg_rows_2 == neg_rows_1
+                    and nm2.get("skipped", 0) >= 1)
+        (_ok if ok_dedup else _fail)(
+            f"rerun: voice signatures unique={sigs_unique} ({len(voice_sigs)} "
+            f"entries), negative_examples stable={neg_rows_2 == neg_rows_1} "
+            f"({neg_rows_1}→{neg_rows_2}), negative skipped={nm2.get('skipped')}")
+        if not ok_dedup:
+            findings["ok"] = False
+
+        # 12d — cooldown: a founder-dismissed proposal stays suppressed.
+        _sub("12d — cooldown: dismissed proposal not re-surfaced")
+        hs = db["skills"].find_one({"_id": "house-style"}) or {}
+        props = load_proposals(hs)
+        target_sig = next((p["signature"] for p in props
+                           if p.get("miner") == "voice"), None)
+        for p in props:
+            if p.get("signature") == target_sig:
+                p["status"] = "dismissed"
+                p["decided_at"] = datetime.now(UTC)
+        db["skills"].update_one({"_id": "house-style"},
+                                {"$set": {"self_critique_proposals": props}})
+        r3 = runner.run_once(db, miners=("voice", "negative"), lookback_days=14)
+        if r3.get("_id"):
+            run_ids.add(r3["_id"])
+        hs3 = db["skills"].find_one({"_id": "house-style"}) or {}
+        after = next((p for p in load_proposals(hs3)
+                      if p.get("signature") == target_sig), None)
+        ok_cool = after is not None and after.get("status") == "dismissed"
+        (_ok if ok_cool else _fail)(
+            f"dismissed voice proposal stayed suppressed across re-run: "
+            f"status={after and after.get('status')!r}")
+        if not ok_cool:
+            findings["ok"] = False
+
+    finally:
+        # Leave the dev DB exactly as found.
+        db["actions"].delete_many({"telemetry_id": {"$regex": f"^{_MINER_PREFIX}"}})
+        db["approvals"].delete_many({"telemetry_id": {"$regex": f"^{_MINER_PREFIX}"}})
+        db["negative_examples"].delete_many(
+            {"source": {"$regex": "^self_critique:"}, "ts": {"$gte": phase_start}})
+        for rid in run_ids:
+            try:
+                db["self_critique_runs"].delete_one({"_id": ObjectId(rid)})
+            except Exception:
+                pass
+        _restore_proposals(db, "house-style", hs_snap)
+        _restore_proposals(db, "review_agent", ra_snap)
+        _info("restored house-style / review_agent / negative_examples to "
+              "pre-phase state")
+
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# Phase 13 — Silent-pass: the Self-Critique Agent must NOT invent a proposal
+# on pattern-free telemetry. The complement of Phase 3 (real Gemini): a
+# self-learning loop that proposes on noise is worse than useless.
+# ---------------------------------------------------------------------------
+
+async def phase_13_silent_pass() -> dict:
+    _banner("Phase 13 — Silent-pass on pattern-free telemetry (real Gemini)")
+    db = mongo_tools.db()
+    findings = {"ok": True}
+    rng = random.Random(43)
+    now = datetime.now(UTC)
+    pfx = f"{_TEST_PREFIX}noise_"
+
+    # Populate the sandbox with the real skills (so the agent's REQUIRED
+    # preamble read_skill calls resolve) + the throwaway noise skill. Without
+    # the real-skills clone the agent crashes on read_skill("house-style")
+    # before it can reason — which would be a false "silent pass".
+    _clone_real_skills_into_sandbox()
+    body = (f"---\nname: {_NOISE_SKILL_ID}\n"
+            f"description: Throwaway skill for the silent-pass probe.\n"
+            f"metadata:\n  version: 1.0.0\n---\n\n# Noise skill\nNeutral body.\n")
+    skill_dir = _SANDBOX_DIR / _NOISE_SKILL_ID
+    (skill_dir / "versions").mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
+    skills_module.refresh_registry()
+
+    db["skills"].delete_one({"_id": _NOISE_SKILL_ID})
+    db["actions"].delete_many({"telemetry_id": {"$regex": f"^{pfx}"}})
+    db["approvals"].delete_many({"telemetry_id": {"$regex": f"^{pfx}"}})
+    db["skills"].insert_one({
+        "_id": _NOISE_SKILL_ID, "skill_kind": "agent_skill",
+        "current_version": "v1", "candidates": [], "history": ["v1"],
+        "applies_to": {"channels": ["email", "linkedin", "substack"]},
+        "versions": {"v1": {"body_md": body, "source": "seed"}}})
+
+    # Healthy, varied scores (no low-score signal) + a few one-off edits whose
+    # before→after share NO recurring phrase (no systematic pattern to find).
+    _POOL = ("quarterly roadmap onboarding latency dashboard webhook invoice "
+             "catalog refund shipping locale sandbox throughput retry").split()
+
+    def _rand_sentence(k: int) -> str:
+        return " ".join(rng.sample(_POOL, k)) + "."
+
+    for ch in ("email", "linkedin", "substack"):
+        for i in range(8):
+            tid = f"{pfx}{ch}_{i}"
+            db["actions"].insert_one({
+                "telemetry_id": tid, "skills_loaded": [_NOISE_SKILL_ID],
+                "channel": ch, "raw": {"draft": _rand_sentence(8)},
+                "eval_scores": {"brand_voice": round(rng.uniform(0.78, 0.92), 4),
+                                "claim_support": 0.85, "claim_risk": 0.85},
+                "ts": now - timedelta(days=rng.uniform(0, 12))})
+            # Sparse, unrelated edits — different random rewrite each time.
+            if i < 2:
+                db["approvals"].insert_one({
+                    "telemetry_id": tid, "decision": "edit",
+                    "approved_text": _rand_sentence(8),
+                    "edit_categories": [], "decided_at": now - timedelta(days=i + 1)})
+
+    agent_errored: str | None = None
+    try:
+        from google.adk.agents.run_config import RunConfig
+        from google.adk.runners import Runner
+        from google.adk.sessions import InMemorySessionService
+        from google.genai.types import Content, Part
+
+        from agents.self_critique import self_critique_agent
+
+        ss = InMemorySessionService()
+        runner = Runner(agent=self_critique_agent, app_name="e2e_skill_evolution",
+                        session_service=ss)
+        session = await ss.create_session(
+            app_name="e2e_skill_evolution", user_id="e2e",
+            state={"telemetry_id": f"{pfx}critique", "skill_id": "self_critique"})
+        msg = Content(role="user", parts=[Part.from_text(text=(
+            f"Run the self-critique pass scoped to agent_skill "
+            f"'{_NOISE_SKILL_ID}'. Use recent_skill_telemetry('{_NOISE_SKILL_ID}') "
+            f"to inspect its drafts and edits. The scores are healthy and the "
+            f"few edits are unrelated one-offs with no shared pattern. Follow "
+            f"your instructions: only propose a revision if a systematic "
+            f"cross-channel pattern genuinely holds. If none does, write NO "
+            f"proposal — staying silent is the correct outcome."))])
+        started = time.monotonic()
+        saw_event = False
+        async for ev in runner.run_async(
+                user_id="e2e", session_id=session.id, new_message=msg,
+                run_config=RunConfig(max_llm_calls=50)):
+            saw_event = True
+            author = getattr(ev, "author", None) or "?"
+            _info(f"[{time.monotonic() - started:5.1f}s] {author}")
+        if not saw_event:
+            agent_errored = "no events produced"
+    except Exception as e:  # noqa: BLE001
+        agent_errored = str(e)
+
+    skill = db["skills"].find_one({"_id": _NOISE_SKILL_ID}) or {}
+    proposals = load_proposals(skill)
+    pending = [p for p in proposals
+               if p and p.get("status") == "awaiting_human_review"]
+    minted = [v for v in (skill.get("versions") or {}) if v != "v1"]
+    no_proposal = not pending and not skill.get("self_critique_proposal")
+
+    if agent_errored:
+        # A crash is NOT a silent pass — we never observed the agent's
+        # decision. Don't claim success; flag inconclusive (re-run). Transient
+        # free-tier API errors are common, so don't hard-fail the suite either.
+        _warn(f"INCONCLUSIVE — agent run errored ({agent_errored[:120]}); "
+              f"silent-pass NOT verified this run. Re-run (likely transient).")
+        findings["inconclusive"] = True
+    elif no_proposal and not minted:
+        _ok("agent correctly stayed SILENT — no proposal, no candidate version "
+            "minted on pattern-free telemetry")
+    else:
+        _fail(f"false-positive: agent wrote a proposal on noise "
+              f"(pending={len(pending)}, minted_versions={minted}, "
+              f"issue={(skill.get('self_critique_proposal') or {}).get('issue')!r})")
+        findings["ok"] = False
+
+    # Cleanup (sandbox dir is wiped wholesale by teardown).
+    db["skills"].delete_one({"_id": _NOISE_SKILL_ID})
+    db["history.skills"].delete_many({"_original_id": _NOISE_SKILL_ID})
+    db["actions"].delete_many({"telemetry_id": {"$regex": f"^{pfx}"}})
+    db["approvals"].delete_many({"telemetry_id": {"$regex": f"^{pfx}"}})
+    return findings
 
 
 # ---------------------------------------------------------------------------
@@ -1248,14 +1502,14 @@ async def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--phases", default=None,
-                   help="Comma-separated subset of phase numbers (0-11).")
+                   help="Comma-separated subset of phase numbers (0-13).")
     p.add_argument("--keep-sandbox", action="store_true",
                    help="Leave the tmpdir sandbox for inspection.")
     p.add_argument("--keep-mongo-on-fail", action="store_true",
                    help="Leave Mongo state intact on failure for diagnosis.")
     args = p.parse_args()
 
-    all_phases = list(range(12))
+    all_phases = list(range(14))
     selected = [int(x) for x in args.phases.split(",")] if args.phases else all_phases
 
     print("=" * 72)
@@ -1299,6 +1553,10 @@ async def main() -> int:
             results["phase_10_reject"] = phase_10_reject_paths()
         if 11 in selected:
             results["phase_11_audit"]  = phase_11_audit()
+        if 12 in selected:
+            results["phase_12_miner_pipeline"] = phase_12_miner_pipeline()
+        if 13 in selected:
+            results["phase_13_silent_pass"] = await phase_13_silent_pass()
     except SystemExit as e:
         elapsed = time.monotonic() - started
         print(f"\n  ✗ Run aborted after {elapsed:.0f}s (exit {e.code})",

@@ -279,15 +279,23 @@ def _evaluate_agent_skill_proposal(skill: dict) -> None:
         )
         return
 
-    per_channel = _agent_skill_per_channel_stats(skill_id, channels=affected)
+    # The baseline must be the Skill's PROJECT-WIDE mean across all the
+    # channels it's used on — not just the affected subset. Otherwise a
+    # genuine pattern that degrades N channels uniformly can never escalate:
+    # measured only against themselves, equally-degraded channels never dip
+    # below their own mean (with exactly 2 affected, it's impossible by
+    # construction). So pull stats for the full channel universe (the Skill's
+    # applies_to.channels ∪ the affected list) and compute the baseline over
+    # all of them; the dip check still applies only to the affected channels.
+    applies_channels = (skill.get("applies_to") or {}).get("channels") or []
+    universe = sorted(set(affected) | set(applies_channels))
+    per_channel = _agent_skill_per_channel_stats(skill_id, channels=universe)
     if not per_channel:
         _downgrade_proposal(skill_id, proposals, entry,
                              reason="no_telemetry",
                              detail="no actions found loading this Skill")
         return
 
-    # Compute baseline = simple mean of every channel's mean. Each channel
-    # weighed equally — keeps a high-volume channel from dominating.
     valid_channels = [c for c in affected if per_channel.get(c, {}).get("n", 0)
                        >= MIN_ACTIONS_PER_CHANNEL]
     missing_volume = sorted(set(affected) - set(valid_channels))
@@ -298,8 +306,15 @@ def _evaluate_agent_skill_proposal(skill: dict) -> None:
                                       f"{MIN_ACTIONS_PER_CHANNEL}: {missing_volume}"))
         return
 
-    metric_values = [per_channel[c][ISSUE_RUBRIC] for c in valid_channels
-                      if per_channel[c].get(ISSUE_RUBRIC) is not None]
+    # Baseline = simple mean of every project channel's mean (each channel
+    # weighed equally so a high-volume channel can't dominate). Only count
+    # channels with enough volume + a rubric score to be trustworthy.
+    baseline_channels = [
+        c for c in universe
+        if per_channel.get(c, {}).get("n", 0) >= MIN_ACTIONS_PER_CHANNEL
+        and per_channel[c].get(ISSUE_RUBRIC) is not None
+    ]
+    metric_values = [per_channel[c][ISSUE_RUBRIC] for c in baseline_channels]
     if not metric_values:
         _downgrade_proposal(skill_id, proposals, entry,
                              reason="no_rubric_data",
@@ -371,9 +386,17 @@ def _agent_skill_per_channel_stats(skill_id: str,
                                     channels: list[str]) -> dict[str, dict]:
     """Per-channel rubric means for actions that loaded this Agent Skill in
     the last 14 days. Uses UNNEST(skills_loaded) so attribution survives
-    cross-channel skill usage."""
+    cross-channel skill usage.
+
+    BigQuery is primary. In LOCAL_DEV there is no BQ (the client is None) but
+    emit_action mirrored every action into Mongo, so we read the identical
+    aggregation from Mongo instead — same windows + rubrics, so the gate's
+    decision is identical local vs prod."""
     if not channels:
         return {}
+    if bigquery_client() is None:
+        from shared import telemetry_reads
+        return telemetry_reads.agent_skill_per_channel_stats(skill_id, channels)
     placeholders = ",".join([f"@c{i}" for i in range(len(channels))])
     params = [bigquery.ScalarQueryParameter("sk", "STRING", skill_id)]
     params.extend(
@@ -507,7 +530,13 @@ def _raise_agent_skill_promotion_request(*, skill: dict, proposals: list[dict],
 
 
 def _version_stats(skill_id: str, versions: list[str]) -> dict[str, dict]:
-    """Aggregate per-version rubric means over the last 30 days."""
+    """Aggregate per-version rubric means over the last 30 days.
+
+    BigQuery is primary; LOCAL_DEV (no BQ client) falls back to the identical
+    Mongo aggregation over the dual-written ``actions`` collection."""
+    if bigquery_client() is None:
+        from shared import telemetry_reads
+        return telemetry_reads.version_stats(skill_id, versions)
     placeholders = ",".join([f"@v{i}" for i in range(len(versions))])
     params = [bigquery.ScalarQueryParameter("sk", "STRING", skill_id)] + [
         bigquery.ScalarQueryParameter(f"v{i}", "STRING", v) for i, v in enumerate(versions)

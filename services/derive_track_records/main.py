@@ -68,7 +68,15 @@ def main():
       {_window_clause()}
     GROUP BY skill_id, skill_version
     """
-    rows = list(BQ.query(sql).result())
+    # BigQuery is primary. LOCAL_DEV (no BQ client) falls back to the identical
+    # Mongo aggregation over the dual-written `actions` collection; rows come
+    # back as dicts keyed like the BQ SELECT aliases either way.
+    if BQ is None:
+        from shared import telemetry_reads
+        rows = telemetry_reads.skill_track_records_rollup(
+            window_days=TRACK_RECORD_WINDOW_DAYS, db=db)
+    else:
+        rows = [dict(r) for r in BQ.query(sql).result()]
     log.info("computed track records for %d (skill, version) pairs", len(rows))
 
     # Full replace pattern — wipe then bulk insert
@@ -77,18 +85,18 @@ def main():
     docs = []
     for r in rows:
         docs.append({
-            "_id": f"{r.skill_id}@{r.skill_version}",
-            "skill_id": r.skill_id,
-            "skill_version": r.skill_version,
-            "action_count": r.action_count,
-            "mean_brand_voice": r.mean_brand_voice,
-            "mean_claim_support": r.mean_claim_support,
-            "mean_claim_risk": r.mean_claim_risk,
-            "mean_icp_relevance": r.mean_icp_relevance,
-            "mean_originality": r.mean_originality,
-            "mean_conversion_intent": r.mean_conversion_intent,
-            "first_seen": r.first_seen,
-            "last_seen": r.last_seen,
+            "_id": f"{r['skill_id']}@{r['skill_version']}",
+            "skill_id": r["skill_id"],
+            "skill_version": r["skill_version"],
+            "action_count": r["action_count"],
+            "mean_brand_voice": r["mean_brand_voice"],
+            "mean_claim_support": r["mean_claim_support"],
+            "mean_claim_risk": r["mean_claim_risk"],
+            "mean_icp_relevance": r["mean_icp_relevance"],
+            "mean_originality": r["mean_originality"],
+            "mean_conversion_intent": r["mean_conversion_intent"],
+            "first_seen": r["first_seen"],
+            "last_seen": r["last_seen"],
             "_derived": {
                 "derived_at": now,
                 "derived_by": "service:derive_track_records",
@@ -139,25 +147,30 @@ def _derive_agent_skill_track_records(db, now: datetime) -> None:
       {_window_clause()}
     GROUP BY skill_name
     """
-    rows = list(BQ.query(sql).result())
+    if BQ is None:
+        from shared import telemetry_reads
+        rows = telemetry_reads.agent_skill_track_records_rollup(
+            window_days=TRACK_RECORD_WINDOW_DAYS, db=db)
+    else:
+        rows = [dict(r) for r in BQ.query(sql).result()]
     log.info("computed agent-skill track records for %d Skills", len(rows))
 
     db["derived.agent_skill_track_records"].delete_many({})
     docs = []
     for r in rows:
         docs.append({
-            "_id": r.skill_name,
-            "skill_name": r.skill_name,
-            "action_count": r.action_count,
-            "mean_brand_voice": r.mean_brand_voice,
-            "mean_claim_support": r.mean_claim_support,
-            "mean_claim_risk": r.mean_claim_risk,
-            "mean_icp_relevance": r.mean_icp_relevance,
-            "mean_originality": r.mean_originality,
-            "mean_conversion_intent": r.mean_conversion_intent,
-            "channels_seen": list(r.channels_seen or []),
-            "first_seen": r.first_seen,
-            "last_seen": r.last_seen,
+            "_id": r["skill_name"],
+            "skill_name": r["skill_name"],
+            "action_count": r["action_count"],
+            "mean_brand_voice": r["mean_brand_voice"],
+            "mean_claim_support": r["mean_claim_support"],
+            "mean_claim_risk": r["mean_claim_risk"],
+            "mean_icp_relevance": r["mean_icp_relevance"],
+            "mean_originality": r["mean_originality"],
+            "mean_conversion_intent": r["mean_conversion_intent"],
+            "channels_seen": list(r.get("channels_seen") or []),
+            "first_seen": r["first_seen"],
+            "last_seen": r["last_seen"],
             "_derived": {
                 "derived_at": now,
                 "derived_by": "service:derive_track_records",
