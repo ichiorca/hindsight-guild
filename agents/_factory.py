@@ -23,7 +23,12 @@ from typing import Literal
 
 from google.adk.agents import LlmAgent
 
-from agents._common import make_after_callback, make_model_armor_callback
+from agents._common import (
+    chain_after_model_callbacks,
+    make_after_callback,
+    make_model_armor_callback,
+    make_tool_name_repair_callback,
+)
 from agents._mcp import mongodb_toolset
 from agents._models import gen_content_config, pick_model
 from agents._skills_config import allowed_for, required_for
@@ -94,7 +99,10 @@ def make_llm_agent(
         ),
         tools=tools,
         output_key=output_key,
-        after_model_callback=make_model_armor_callback(),
+        after_model_callback=chain_after_model_callbacks(
+            make_tool_name_repair_callback(),
+            make_model_armor_callback(),
+        ),
         after_agent_callback=make_after_callback(
             agent_name=name,
             skill_id=skill_id,

@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -285,6 +286,96 @@ def make_model_armor_callback() -> Callable:
         return None
 
     return callback
+
+
+# ---------------------------------------------------------------------------
+# Tool-name repair — tolerate model tool-name hallucinations
+# ---------------------------------------------------------------------------
+#
+# Gemini intermittently calls a tool by a slightly-wrong name — most often
+# dropping the MCP ``mongodb_`` prefix and/or swapping the hyphen for an
+# underscore (``list_collections`` instead of ``mongodb_list-collections``).
+# ADK treats an unknown tool name as a hard ValueError, the agent run dies,
+# and the error text leaks out AS THE DRAFT. We repair the name in the
+# after_model_callback (before ADK dispatches) by canonical match against the
+# real tool names, so a near-miss resolves instead of crashing the run.
+
+_MONGODB_TOOL_NAMES = (
+    "mongodb_find", "mongodb_aggregate", "mongodb_count",
+    "mongodb_collection-schema", "mongodb_collection-indexes",
+    "mongodb_list-collections", "mongodb_vector_search",
+    "mongodb_insert_one", "mongodb_insert_many", "mongodb_update_one",
+)
+
+
+def _canonical_tool(name: str) -> str:
+    """Normalize a tool name for fuzzy matching: drop a leading ``mongodb``
+    prefix, lowercase, strip every non-alphanumeric char. So
+    ``list_collections``, ``mongodb_list-collections`` and
+    ``mongodbListCollections`` all collapse to ``listcollections``."""
+    base = (name or "").lower()
+    if base.startswith("mongodb"):
+        base = base[len("mongodb"):]
+    return re.sub(r"[^a-z0-9]", "", base)
+
+
+_CANONICAL_TO_TOOL = {_canonical_tool(n): n for n in _MONGODB_TOOL_NAMES}
+
+
+def repair_tool_name(name: str) -> str:
+    """Return the real tool name for a (possibly hallucinated) ``name``.
+
+    Exact matches pass through. A near-miss whose canonical form matches a
+    known MongoDB tool is remapped; anything else is returned unchanged (so
+    skill tools, web_search, etc. are never touched)."""
+    if not name or name in _MONGODB_TOOL_NAMES:
+        return name
+    return _CANONICAL_TO_TOOL.get(_canonical_tool(name), name)
+
+
+def make_tool_name_repair_callback() -> Callable:
+    """after_model_callback that rewrites hallucinated tool-call names to the
+    real registered tool before ADK dispatches them."""
+
+    def callback(callback_context, llm_response):  # type: ignore[no-untyped-def]
+        try:
+            content = getattr(llm_response, "content", None)
+            parts = getattr(content, "parts", None) or []
+            changed = False
+            for p in parts:
+                fc = getattr(p, "function_call", None)
+                nm = getattr(fc, "name", None) if fc else None
+                if nm:
+                    fixed = repair_tool_name(nm)
+                    if fixed != nm:
+                        log.warning("repaired hallucinated tool name %r -> %r",
+                                    nm, fixed)
+                        fc.name = fixed
+                        changed = True
+            if changed:
+                return llm_response
+        except Exception as e:  # noqa: BLE001 — never break the run on repair
+            log.warning("tool-name repair callback failed: %s", e)
+        return None
+
+    return callback
+
+
+def chain_after_model_callbacks(*callbacks: Callable) -> Callable:
+    """Compose several after_model_callbacks into one. Each runs in order on the
+    (possibly already-modified) response; the last non-None return wins as the
+    response ADK proceeds with."""
+
+    def combined(callback_context, llm_response):  # type: ignore[no-untyped-def]
+        result = None
+        for cb in callbacks:
+            r = cb(callback_context, llm_response)
+            if r is not None:
+                llm_response = r
+                result = r
+        return result
+
+    return combined
 
 
 def _declared_outcomes(action_type: str) -> list[OutcomeSlot]:
