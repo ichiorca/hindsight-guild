@@ -35,5 +35,6 @@ echo "==> Deploying web/dist to Firebase Hosting (project ${FIREBASE_PROJECT})"
 
 echo ""
 echo "==> UI deployed to Firebase Hosting."
-echo "    Default URL: https://${FIREBASE_PROJECT}.web.app"
-echo "    (add a custom domain in the Firebase console → Hosting when ready)"
+echo "    URL: https://hindsight-guild.web.app  (Hosting site 'hindsight-guild')"
+echo "    (firebase.json pins hosting.site=hindsight-guild; the default"
+echo "     ${FIREBASE_PROJECT}.web.app site is left untouched)"
