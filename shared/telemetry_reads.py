@@ -185,6 +185,95 @@ def agent_skill_track_records_rollup(*, window_days: int = 0,
     return out
 
 
+def action_experiment_for(telemetry_id: str, *, db=None):
+    """Mongo equivalent of outcome_attach's ``SELECT experiment_id, variant_id
+    FROM actions WHERE telemetry_id=@id``. Returns ``(experiment_id,
+    variant_id)`` or ``None``."""
+    db = _db(db)
+    a = db["actions"].find_one(
+        {"telemetry_id": telemetry_id},
+        {"experiment_id": 1, "variant_id": 1})
+    if not a:
+        return None
+    return (a.get("experiment_id"), a.get("variant_id"))
+
+
+def experiment_variant_stats(experiment_id: str, success_metric: str, *,
+                             db=None) -> dict[str, tuple]:
+    """Mongo equivalent of outcome_attach's per-variant decision aggregation.
+
+    Returns ``{variant_id: (mean_val, n)}``. For ``*_score`` success metrics
+    it averages ``actions.eval_scores.<rubric>`` (matching the BQ score path);
+    otherwise it joins ``actions`` → filled ``outcomes`` on telemetry_id and
+    averages the outcome value for that slot (matching the BQ outcomes join).
+    """
+    db = _db(db)
+    if success_metric.endswith("_score"):
+        rubric = success_metric[: -len("_score")]
+        rows = db["actions"].aggregate([
+            {"$match": {"experiment_id": experiment_id,
+                        "eval_scores": {"$ne": None}}},
+            {"$group": {"_id": "$variant_id",
+                        "mean_val": {"$avg": f"$eval_scores.{rubric}"},
+                        "n": {"$sum": 1}}},
+        ])
+    else:
+        rows = db["actions"].aggregate([
+            {"$match": {"experiment_id": experiment_id}},
+            {"$lookup": {"from": "outcomes", "localField": "telemetry_id",
+                         "foreignField": "telemetry_id", "as": "o"}},
+            {"$unwind": "$o"},
+            {"$match": {"o.slot_name": success_metric, "o.status": "filled"}},
+            {"$group": {"_id": "$variant_id",
+                        "mean_val": {"$avg": "$o.value"},
+                        "n": {"$sum": 1}}},
+        ])
+    return {r["_id"]: (r["mean_val"], r["n"]) for r in rows if r.get("_id")}
+
+
+def drift_cells(rubric: str, *, threshold: float = 0.10, min_sample: int = 20,
+                db=None) -> list[dict]:
+    """Mongo equivalent of drift_detect._detect_drift. Per channel, compares
+    the recent window (last 3 days) against the trailing baseline (4-31 days
+    ago) and returns cells whose mean dropped >= ``threshold`` with >=
+    ``min_sample`` recent actions. Mirrors the BQ DATE() day-window SQL.
+    """
+    from datetime import time as _time
+    db = _db(db)
+    today = datetime.now(UTC).date()
+    # recent: DATE(ts) >= today-3  ·  baseline: today-31 <= DATE(ts) <= today-4
+    recent_lo = datetime.combine(today - timedelta(days=3), _time.min, tzinfo=UTC)
+    base_lo = datetime.combine(today - timedelta(days=31), _time.min, tzinfo=UTC)
+    field = f"$eval_scores.{rubric}"
+    rows = db["actions"].aggregate([
+        {"$match": {"eval_scores": {"$ne": None}, "channel": {"$exists": True}}},
+        {"$group": {
+            "_id": "$channel",
+            "recent_sum": {"$sum": {"$cond": [
+                {"$gte": ["$ts", recent_lo]}, field, 0]}},
+            "recent_n": {"$sum": {"$cond": [{"$gte": ["$ts", recent_lo]}, 1, 0]}},
+            "baseline_sum": {"$sum": {"$cond": [
+                {"$and": [{"$gte": ["$ts", base_lo]},
+                          {"$lt": ["$ts", recent_lo]}]}, field, 0]}},
+            "baseline_n": {"$sum": {"$cond": [
+                {"$and": [{"$gte": ["$ts", base_lo]},
+                          {"$lt": ["$ts", recent_lo]}]}, 1, 0]}},
+        }},
+    ])
+    out: list[dict] = []
+    for r in rows:
+        if r["recent_n"] < min_sample or r["baseline_n"] == 0:
+            continue
+        mean_today = r["recent_sum"] / r["recent_n"]
+        mean_baseline = r["baseline_sum"] / r["baseline_n"]
+        drop = mean_baseline - mean_today
+        if drop >= threshold:
+            out.append({"channel": r["_id"], "day": str(today),
+                        "mean_today": mean_today, "mean_baseline": mean_baseline,
+                        "drop": drop, "n": r["recent_n"]})
+    return out
+
+
 def recent_skill_evidence(skill_id: str, *, lookback_days: int = 14,
                           max_rows: int = 10,
                           low_score_below: float = 0.65,

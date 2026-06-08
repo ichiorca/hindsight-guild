@@ -203,6 +203,8 @@ def phase_1_cleanup(*, keep: bool = False) -> None:
     deleted_exp = db["experiments"].delete_many(exp_filter).deleted_count  # audit:exempt — test cleanup
     deleted_drift = db["experiments"].delete_many(drift_filter).deleted_count  # audit:exempt — test cleanup
     deleted_actions = db["actions"].delete_many(action_filter).deleted_count
+    db["outcomes"].delete_many(
+        {"telemetry_id": {"$regex": f"^{_TEST_ACTION_PREFIX}"}})
     # Tear down history rows so the audit trail doesn't bloat between runs.
     deleted_history = db["history"].delete_many({
         "collection": "experiments",
@@ -211,12 +213,19 @@ def phase_1_cleanup(*, keep: bool = False) -> None:
             {"change_kind": {"$regex": "drift"}, "snapshot.tags": _TEST_TAG},
         ],
     }).deleted_count
-    # If a previous run raised a promotion_request on linkedin_post, clear
-    # it so this run starts clean. The skill's other state is untouched.
+    # If a previous run raised a promotion_request on linkedin_post, clear it
+    # so this run starts clean. Matches both the legacy test-written shape
+    # (source marker) and the REAL gate's shape (candidate == the test-only
+    # candidate version). Also drop the test candidate from candidates[].
     db["skills"].update_one(  # audit:exempt — test cleanup ($unset of test-only field)
         {"_id": _PROMOTION_SKILL_ID,
-         "promotion_request.source": "lifecycle_e2e_test"},
+         "$or": [{"promotion_request.source": "lifecycle_e2e_test"},
+                 {"promotion_request.candidate": _CANDIDATE_VERSION}]},
         {"$unset": {"promotion_request": ""}},
+    )
+    db["skills"].update_one(  # audit:exempt — test cleanup
+        {"_id": _PROMOTION_SKILL_ID},
+        {"$pull": {"candidates": _CANDIDATE_VERSION}},
     )
 
     _ok(f"Deleted {deleted_exp} test experiments, {deleted_drift} drift investigations, "
@@ -438,11 +447,33 @@ async def phase_3_run_pipeline(exp: dict) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def phase_4_synthesize_outcomes(exp: dict) -> dict[str, list[float]]:
-    _banner("Phase 4 — Synthesize outcome values (LOCAL_DEV substitute for GA4)")
+    _banner("Phase 4 — Fill outcome slots (LOCAL_DEV substitute for GA4)")
 
     db = mongo_tools.db()
+
+    # Normalize the experiment's decision params to known test values so the
+    # REAL outcome_attach decision logic (phase 5) is deterministic regardless
+    # of what the CMO LLM authored for success_metric / mde / min_n.
+    db["experiments"].update_one({"_id": exp["_id"]}, {"$set": {
+        "success_metric": _OUTCOME_METRIC,
+        "mde": _OUTCOME_MDE,
+        "min_n_per_arm": _MIN_N_PER_ARM,
+    }})
+    exp["success_metric"] = _OUTCOME_METRIC
+    exp["mde"] = _OUTCOME_MDE
+    exp["min_n_per_arm"] = _MIN_N_PER_ARM
+
     rng = random.Random(42)  # deterministic so re-runs are reproducible
     by_variant: dict[str, list[float]] = {}
+
+    # Production: services/outcome_attach fills telemetry.outcomes from GA4 etc.
+    # emit_action dual-writes the same row shape into Mongo `outcomes`, so we
+    # write FILLED outcome rows there (slot_name = the experiment's
+    # success_metric) — exactly what the real _maybe_decide_experiment joins.
+    all_tids = [a["telemetry_id"] for a in
+                db["actions"].find({"experiment_id": exp["_id"]}, {"telemetry_id": 1})]
+    db["outcomes"].delete_many(
+        {"telemetry_id": {"$in": all_tids}, "slot_name": _OUTCOME_METRIC})
 
     for variant in exp["variants"]:
         variant_id = variant["id"]
@@ -454,64 +485,60 @@ def phase_4_synthesize_outcomes(exp: dict) -> dict[str, list[float]]:
         values: list[float] = []
         for action in actions:
             v = round(rng.uniform(*bounds), 4)
-            db["actions"].update_one(
-                {"_id": action["_id"]},
-                {"$set": {
-                    f"outcome.{_OUTCOME_METRIC}.value": v,
-                    f"outcome.{_OUTCOME_METRIC}.status": "filled",
-                    f"outcome.{_OUTCOME_METRIC}.source": "lifecycle_e2e_synthetic",
-                    f"outcome.{_OUTCOME_METRIC}.filled_at": datetime.now(UTC),
-                }},
-            )
+            db["outcomes"].insert_one({
+                "telemetry_id": action["telemetry_id"],
+                "slot_name": _OUTCOME_METRIC,
+                "metric": _OUTCOME_METRIC,
+                "value": v,
+                "status": "filled",
+                "source": "lifecycle_e2e_synthetic",
+                "filled_at": datetime.now(UTC),
+            })
             values.append(v)
         by_variant[variant_id] = values
         _info(f"{variant_id}: n={len(values)} mean={statistics.fmean(values):.3f} "
-              f"(synthesized from {bounds})")
+              f"(synthesized from {bounds}, written to outcomes collection)")
 
     return by_variant
 
 
 # ---------------------------------------------------------------------------
-# Phase 5 — Decide the experiment.
+# Phase 5 — Decide the experiment via the REAL service.
 #
-# Mongo-equivalent of services.outcome_attach._maybe_decide_experiment.
-# Same threshold logic: needs n ≥ min_n_per_arm on every variant, and
-# winner − runner ≥ mde. Calls the same mongo_tools.transition_experiment_state
-# production uses, so the audit trail in history.experiments is identical.
+# Runs services.outcome_attach._maybe_decide_experiment unchanged. In LOCAL_DEV
+# (no BQ client) it reads the dual-written Mongo `actions` + `outcomes` we just
+# filled — the same code path prod runs against BigQuery. No reimplementation.
 # ---------------------------------------------------------------------------
 
 def phase_5_decide(exp: dict, by_variant: dict[str, list[float]]) -> None:
-    _banner("Phase 5 — Decide the experiment (Mongo equivalent of outcome_attach)")
+    _banner("Phase 5 — Decide the experiment (real outcome_attach._maybe_decide_experiment)")
 
-    means: dict[str, float] = {v: statistics.fmean(vals)
-                                for v, vals in by_variant.items()}
-    counts: dict[str, int] = {v: len(vals) for v, vals in by_variant.items()}
+    from services.outcome_attach import main as outcome_attach
 
-    min_n = exp.get("min_n_per_arm", 400)
-    if any(n < min_n for n in counts.values()):
-        _fail(f"Sample sizes too low to decide (counts={counts}, min_n={min_n})")
+    db = mongo_tools.db()
+    means = {v: statistics.fmean(vals) for v, vals in by_variant.items() if vals}
+    counts = {v: len(vals) for v, vals in by_variant.items()}
+    _info(f"synthesized means={means} counts={counts} "
+          f"(MDE={exp['mde']}, min_n={exp['min_n_per_arm']})")
+
+    # outcome_attach calls _maybe_decide_experiment once per filled slot; calling
+    # it for any one filled telemetry_id triggers the full per-variant
+    # aggregation + state transition inside the real service.
+    one = db["actions"].find_one({"experiment_id": exp["_id"]}, {"telemetry_id": 1})
+    if not one:
+        _fail("no actions found for the experiment; cannot drive the decision.")
         raise SystemExit(1) from None
+    outcome_attach._maybe_decide_experiment(one["telemetry_id"], 0.0)
 
-    ranked = sorted(means.items(), key=lambda kv: kv[1], reverse=True)
-    (winner, winner_mean), (runner, runner_mean) = ranked[0], ranked[1]
-    lift = winner_mean - runner_mean
-    _info(f"means = {means}")
-    _info(f"winner={winner!r} runner={runner!r} lift={lift:.3f} "
-          f"(MDE={exp['mde']})")
-
-    if lift < exp["mde"]:
-        _fail(f"Lift {lift:.3f} below MDE {exp['mde']}; not flipping state.")
+    decided = mongo_tools.find_one("experiments", {"_id": exp["_id"]}) or {}
+    result = decided.get("result") or {}
+    if decided.get("state") == "decided":
+        _ok(f"real outcome_attach decided {exp['_id']}: "
+            f"winner={result.get('winner')!r} lift={result.get('lift', 0):.3f}")
+    else:
+        _fail(f"real outcome_attach did NOT decide (state={decided.get('state')!r}); "
+              f"means={means} counts={counts}")
         raise SystemExit(1) from None
-
-    mongo_tools.transition_experiment_state(
-        exp["_id"], "decided",
-        result={"winner": winner, "lift": lift, "n": min_n},
-        lesson=(f"Variant {winner} beat {runner} by {lift:.3f} on "
-                f"{exp['success_metric']}"),
-        actor_id="lifecycle_e2e_test",
-    )
-    _ok(f"Experiment {exp['_id']} transitioned to state=\"decided\" "
-        f"(lift={lift:.3f})")
 
 
 # ---------------------------------------------------------------------------
@@ -563,115 +590,29 @@ def phase_6_drift_detection() -> None:
     _info(f"synthesized {_DRIFT_BASELINE_N} baseline + {_DRIFT_RECENT_N} recent "
           f"actions on channel={_DRIFT_CHANNEL!r}")
 
-    # Mongo equivalent of services.drift_detect._detect_drift's BQ SQL.
-    # Aggregates by channel; computes mean rubric score in the recent
-    # window (last 3 days) and the baseline window (4–31 days ago).
-    recent_cutoff = now - timedelta(days=3)
-    baseline_oldest = now - timedelta(days=31)
-    baseline_newest = now - timedelta(days=4)
+    # Detect drift with the REAL service. In LOCAL_DEV drift_detect._detect_drift
+    # falls back to the identical recent-vs-baseline aggregation over the
+    # dual-written Mongo `actions` collection — no reimplementation.
+    from services.drift_detect import main as drift_detect
 
-    pipeline = [
-        {"$match": {
-            "eval_scores": {"$exists": True, "$ne": None},
-            "channel": {"$exists": True},
-        }},
-        {"$group": {
-            "_id": "$channel",
-            "recent_sum": {"$sum": {"$cond": [
-                {"$gte": ["$ts", recent_cutoff]},
-                f"${'eval_scores.' + _DRIFT_RUBRIC}", 0,
-            ]}},
-            "recent_n": {"$sum": {"$cond": [
-                {"$gte": ["$ts", recent_cutoff]}, 1, 0,
-            ]}},
-            "baseline_sum": {"$sum": {"$cond": [
-                {"$and": [{"$gte": ["$ts", baseline_oldest]},
-                          {"$lte": ["$ts", baseline_newest]}]},
-                f"${'eval_scores.' + _DRIFT_RUBRIC}", 0,
-            ]}},
-            "baseline_n": {"$sum": {"$cond": [
-                {"$and": [{"$gte": ["$ts", baseline_oldest]},
-                          {"$lte": ["$ts", baseline_newest]}]},
-                1, 0,
-            ]}},
-        }},
-    ]
-    rows = list(db["actions"].aggregate(pipeline))
-    drift_events = []
-    for r in rows:
-        if r["recent_n"] < _DRIFT_MIN_SAMPLE or r["baseline_n"] == 0:
-            continue
-        recent_mean = r["recent_sum"] / r["recent_n"]
-        baseline_mean = r["baseline_sum"] / r["baseline_n"]
-        drop = baseline_mean - recent_mean
-        if drop >= _DRIFT_THRESHOLD:
-            drift_events.append({
-                "channel": r["_id"],
-                "day": str(now.date()),
-                "mean_today": recent_mean,
-                "mean_baseline": baseline_mean,
-                "drop": drop,
-                "n": r["recent_n"],
-            })
-
+    drift_events = [e for e in drift_detect._detect_drift(_DRIFT_RUBRIC)
+                    if e["channel"] == _DRIFT_CHANNEL]
     if not drift_events:
         _fail(f"Expected a drift event on channel={_DRIFT_CHANNEL!r}; none detected.")
         raise SystemExit(1) from None
-    _ok(f"detected {len(drift_events)} drift event(s): "
-        f"{[(e['channel'], round(e['drop'], 3)) for e in drift_events]}")
+    _ok(f"real drift_detect._detect_drift found {len(drift_events)} cell(s) on "
+        f"{_DRIFT_CHANNEL!r}: drop={drift_events[0]['drop']:.3f} "
+        f"(baseline={drift_events[0]['mean_baseline']:.3f} → "
+        f"recent={drift_events[0]['mean_today']:.3f})")
 
-    # Open an investigation experiment for each drift event. This mirrors
-    # services.drift_detect.main._open_investigation byte-for-byte (same
-    # _id format, same tags, same shape), but inlined so the test doesn't
-    # depend on the drift_detect module — that module constructs a
-    # bigquery.Client() at import time, which is unnecessary friction in
-    # LOCAL_DEV. Production runs the version in drift_detect/main.py.
-    from mongo.history import DocumentNotFound, insert_with_provenance, update_with_history
+    # Open the investigation via the REAL service function, then tag it with
+    # _TEST_TAG so phase_1_cleanup sweeps it (production tags are
+    # ["drift","investigation","auto_opened"], no test marker).
     for ev in drift_events:
-        day_compact = ev["day"].replace("-", "")
-        exp_id = f"exp_drift_{_DRIFT_RUBRIC}_{ev['channel']}_{day_compact}"
-        drift_exp = {
-            "_id": exp_id,
-            "title": f"Investigate {_DRIFT_RUBRIC} drop on {ev['channel']}",
-            "hypothesis": (
-                f"Rubric {_DRIFT_RUBRIC} dropped {ev['drop']:.2f} on "
-                f"{ev['channel']} over the last 3 days vs trailing 28d "
-                f"baseline. Most likely cause: a recent prompt change. "
-                f"Diff playbook history to identify the change."
-            ),
-            "channel": ev["channel"],
-            "variants": [
-                {"id": "baseline_period", "playbook_version": "PRIOR",
-                 "metric_value": ev["mean_baseline"]},
-                {"id": "current_period", "playbook_version": "CURRENT",
-                 "metric_value": ev["mean_today"]},
-            ],
-            "success_metric": f"{_DRIFT_RUBRIC}_score",
-            "state": "running",
-            "created_at": datetime.now(UTC),
-            "tags": ["drift", "investigation", "auto_opened", _TEST_TAG],
-            "auto_opened_by": "lifecycle_e2e_test",
-        }
-        if mongo_tools.find_one("experiments", {"_id": exp_id}) is None:
-            insert_with_provenance(
-                "experiments", drift_exp,
-                actor_id="lifecycle_e2e_test",
-                change_kind="drift_investigation_opened",
-            )
-        else:
-            try:
-                update_with_history(
-                    "experiments", {"_id": exp_id},
-                    {"$set": {k: v for k, v in drift_exp.items() if k != "_id"}},
-                    actor_id="lifecycle_e2e_test",
-                    change_kind="drift_investigation_refreshed",
-                )
-            except DocumentNotFound:
-                insert_with_provenance(
-                    "experiments", drift_exp,
-                    actor_id="lifecycle_e2e_test",
-                    change_kind="drift_investigation_opened",
-                )
+        drift_detect._open_investigation(_DRIFT_RUBRIC, ev)
+        exp_id = drift_detect._drift_exp_id(_DRIFT_RUBRIC, ev["channel"], ev["day"])
+        db["experiments"].update_one(
+            {"_id": exp_id}, {"$addToSet": {"tags": _TEST_TAG}})
 
     opened = list(db["experiments"].find({
         "tags": "drift", "state": "running",
@@ -696,133 +637,79 @@ def phase_6_drift_detection() -> None:
 # ---------------------------------------------------------------------------
 
 def phase_7_promotion_gate(exp: dict) -> None:
-    _banner("Phase 7 — Promotion gate (Mongo equivalent)")
+    _banner("Phase 7 — Promotion gate (real services.promotion_gate)")
 
     from mongo.history import update_with_history
+    from services.promotion_gate import main as gate
 
     db = mongo_tools.db()
+    rng = random.Random(11)
+    now = datetime.now(UTC)
 
-    # 1. Mark linkedin_post as having a candidate. Production raises
-    #    candidates via the self_critique pipeline; in the test we
-    #    simulate that step — routed through update_with_history so the
-    #    pre-image lands in history.skills (same write path production uses).
+    # 1. Mark linkedin_post as having a candidate (production raises these via
+    #    self-critique; we simulate that one upstream step) — history-tracked.
     update_with_history(
         "skills", {"_id": _PROMOTION_SKILL_ID},
         {"$addToSet": {"candidates": _CANDIDATE_VERSION}},
-        actor_id="lifecycle_e2e_test",
-        change_kind="candidate_added",
-    )
+        actor_id="lifecycle_e2e_test", change_kind="candidate_added")
     _info(f"marked skills.{_PROMOTION_SKILL_ID} with candidates += "
           f"[{_CANDIDATE_VERSION}]")
 
-    # 2. Tag every test-experiment action with the variant's
-    #    playbook_version. The pipeline emits its own skill_version
-    #    (typically "v1" from the seeded skill doc), but the
-    #    promotion-gate aggregation needs the version to match the
-    #    experiment's variant->playbook_version map. Unconditional
-    #    overwrite — within this test the experiment's variants ARE
-    #    the canonical incumbent/candidate names.
-    variant_to_version = {v["id"]: v["playbook_version"] for v in exp["variants"]}
-    for variant_id, version in variant_to_version.items():
-        result = db["actions"].update_many(
-            {"experiment_id": exp["_id"], "variant_id": variant_id},
-            {"$set": {"skill_version": version}},
-        )
-        _info(f"  → set skill_version={version!r} on {result.modified_count} "
-              f"actions for variant {variant_id}")
-
-    # 3. Aggregate eval scores by skill_version. Mirrors the BQ SQL in
-    #    services.promotion_gate._evaluate_candidate.
-    versions = [_INCUMBENT_VERSION, _CANDIDATE_VERSION]
-    pipeline = [
-        {"$match": {
+    # 2. Seed enough SCORED actions on both versions to clear the REAL gate's
+    #    MIN_ACTIONS=50. Mongo-only synthetic rows (no LLM): the candidate
+    #    beats the incumbent on brand_voice by ~8pp with tight variance
+    #    (clearly significant) and equal guardrails (no regression). In prod
+    #    these scores come from live Vertex Eval; here we synthesize them so
+    #    the gate's aggregation has real input. The 30-day window + skill_id +
+    #    skill_version match what gate._version_stats reads.
+    promo_pfx = f"{_TEST_ACTION_PREFIX}promo_"
+    db["actions"].delete_many({"telemetry_id": {"$regex": f"^{promo_pfx}"}})
+    n_per_version = max(gate.MIN_ACTIONS + 5, 55)
+    for version, bv_mean in ((_INCUMBENT_VERSION, 0.78), (_CANDIDATE_VERSION, 0.86)):
+        db["actions"].insert_many([{
+            "telemetry_id": f"{promo_pfx}{version}_{i}",
+            "agent": "content_agent",
             "skill_id": _PROMOTION_SKILL_ID,
-            "skill_version": {"$in": versions},
-            "eval_scores.brand_voice": {"$ne": None},
-        }},
-        {"$group": {
-            "_id": "$skill_version",
-            "n": {"$sum": 1},
-            "brand_voice_sum": {"$sum": "$eval_scores.brand_voice"},
-            "claim_support_sum": {"$sum": "$eval_scores.claim_support"},
-        }},
-    ]
-    rows = {r["_id"]: r for r in db["actions"].aggregate(pipeline)}
+            "skill_version": version,
+            "action_type": "draft",
+            "channel": "linkedin",
+            "icp_segment": "seg_merchant_dtc",
+            "eval_scores": {
+                "brand_voice":       round(rng.gauss(bv_mean, 0.02), 4),
+                "claim_support":     round(rng.gauss(0.82, 0.02), 4),
+                "claim_risk":        round(rng.gauss(0.85, 0.02), 4),
+                "icp_relevance":     round(rng.gauss(0.80, 0.02), 4),
+                "originality":       round(rng.gauss(0.75, 0.02), 4),
+                "conversion_intent": round(rng.gauss(0.70, 0.02), 4),
+            },
+            "ts": now - timedelta(days=rng.uniform(0, 25)),
+        } for i in range(n_per_version)])
+    _info(f"seeded {n_per_version} scored actions per version "
+          f"({_INCUMBENT_VERSION} bv≈0.78 vs {_CANDIDATE_VERSION} bv≈0.86)")
 
-    inc = rows.get(_INCUMBENT_VERSION)
-    cand = rows.get(_CANDIDATE_VERSION)
+    # 3. Run the REAL gate. In LOCAL_DEV gate._version_stats falls back to the
+    #    same Mongo aggregation prod runs against BigQuery (shared.telemetry_reads),
+    #    so MDE + significance + guardrail logic all execute unmodified.
+    skill = db["skills"].find_one({"_id": _PROMOTION_SKILL_ID})
+    try:
+        gate._evaluate_candidate(skill, _INCUMBENT_VERSION, _CANDIDATE_VERSION)
 
-    if not inc or not cand:
-        # In LOCAL_DEV the pipeline's Vertex Eval calls degrade — many
-        # actions will have eval_scores=None. We backfill synthetic eval
-        # scores so the promotion path can complete. Production never
-        # hits this branch because Vertex Eval populates scores live.
-        _info("eval_scores missing on some actions (Vertex Eval is unreachable "
-              "in LOCAL_DEV). Backfilling synthetic brand_voice / claim_support "
-              "so promotion-gate aggregation has rows.")
-        rng = random.Random(11)
-        for variant_id, version in variant_to_version.items():
-            mean = (0.84 if version == _CANDIDATE_VERSION else 0.78)
-            for action in db["actions"].find({
-                "experiment_id": exp["_id"], "variant_id": variant_id,
-            }):
-                bv = round(rng.gauss(mean, 0.02), 4)
-                cs = round(rng.gauss(0.80, 0.02), 4)
-                # eval_scores often serializes to literal null on
-                # pre-scoring telemetry rows (Vertex Eval is unreachable
-                # in LOCAL_DEV). Dotted-path $set can't address
-                # sub-fields of null, so overwrite the whole subdoc —
-                # merging any prior keys so production code paths that
-                # populated other rubrics aren't trampled.
-                prior = action.get("eval_scores") or {}
-                if not isinstance(prior, dict):
-                    prior = {}
-                new_scores = {**prior, "brand_voice": bv, "claim_support": cs}
-                db["actions"].update_one(
-                    {"_id": action["_id"]},
-                    {"$set": {"eval_scores": new_scores}},
-                )
-        rows = {r["_id"]: r for r in db["actions"].aggregate(pipeline)}
-        inc, cand = rows.get(_INCUMBENT_VERSION), rows.get(_CANDIDATE_VERSION)
-
-    if not inc or not cand:
-        _fail("Could not assemble promotion-gate aggregation after backfill.")
-        raise SystemExit(1) from None
-
-    inc_bv = inc["brand_voice_sum"] / inc["n"]
-    cand_bv = cand["brand_voice_sum"] / cand["n"]
-    lift = cand_bv - inc_bv
-    _info(f"incumbent {_INCUMBENT_VERSION}: n={inc['n']} brand_voice={inc_bv:.3f}")
-    _info(f"candidate {_CANDIDATE_VERSION}: n={cand['n']} brand_voice={cand_bv:.3f}")
-    _info(f"lift = {lift:.3f}  (MDE={_PROMOTION_MDE})")
-
-    if cand["n"] < _PROMOTION_MIN_ACTIONS or lift < _PROMOTION_MDE:
-        _info("Promotion gate didn't fire (candidate didn't clear the bar). "
-              "This is a valid outcome — the gate is doing its job. Skipping "
-              "promotion_request write.")
-        return
-
-    # 4. Raise the promotion_request — same shape as
-    #    services.promotion_gate._raise_promotion_request.
-    promo = {
-        "candidate_version": _CANDIDATE_VERSION,
-        "incumbent_version": _INCUMBENT_VERSION,
-        "metric": "brand_voice",
-        "lift": round(lift, 4),
-        "candidate_n": cand["n"],
-        "incumbent_n": inc["n"],
-        "source": "lifecycle_e2e_test",
-        "status": "awaiting_approval",
-        "raised_at": datetime.now(UTC),
-    }
-    update_with_history(
-        "skills", {"_id": _PROMOTION_SKILL_ID},
-        {"$set": {"promotion_request": promo}},
-        actor_id="lifecycle_e2e_test",
-        change_kind="promotion_request_raised",
-    )
-    _ok(f"promotion_request raised on skills.{_PROMOTION_SKILL_ID} "
-        f"(awaiting_approval, lift={lift:.3f})")
+        promoted = db["skills"].find_one({"_id": _PROMOTION_SKILL_ID}) or {}
+        pr = promoted.get("promotion_request") or {}
+        if (pr.get("candidate") == _CANDIDATE_VERSION
+                and pr.get("status") == "awaiting_approval"):
+            _ok(f"real promotion_gate raised a promotion_request on "
+                f"skills.{_PROMOTION_SKILL_ID} (candidate={pr.get('candidate')}, "
+                f"metric={pr.get('success_metric')}, lift={pr.get('lift', 0):.3f}, "
+                f"z={pr.get('significance_z')})")
+        else:
+            _fail(f"real promotion_gate did NOT raise a promotion_request "
+                  f"(promotion_request={pr!r})")
+            raise SystemExit(1) from None
+    finally:
+        # The synthetic gate actions have served their purpose; the
+        # promotion_request + candidates[] are swept by phase_1_cleanup.
+        db["actions"].delete_many({"telemetry_id": {"$regex": f"^{promo_pfx}"}})
 
 
 # ---------------------------------------------------------------------------

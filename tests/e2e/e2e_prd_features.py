@@ -491,6 +491,69 @@ def run_signals_section(base: str) -> Section:
     except Exception as e:
         s.fail("backref", f"back-ref flow failed: {e}")
 
+    # 9. FULL PRD-02 autonomy chain. The real signal_router.run_once() reads a
+    #    scored, unprocessed signal, picks it, and enqueues a draft via the
+    #    REAL /api/draft endpoint — then marks the signal processed with the
+    #    job back-ref. This is the core PRD-02 promise (autonomous drafting),
+    #    exercised end-to-end rather than just "route-now doesn't 500".
+    try:
+        from agents import signal_router
+
+        src_name = f"hn-chain-{E2E_RUN_TAG}"
+        chain_url = f"https://news.ycombinator.com/item?id=chain-{E2E_RUN_TAG}"
+        db[Coll.SIGNAL_SOURCES].insert_one({
+            "name": src_name, "source": "hn", "enabled": True,
+            "icp_segment": "seg_merchant_dtc", "score_floor": 0.5,
+            "default_channel": "linkedin", "cursor": None,
+            "config": {"query": "x"},
+        })
+        sig_id = db[Coll.SIGNALS].insert_one({
+            "evidence_url": chain_url,
+            "evidence_excerpt": "how do I make my store agent-checkout ready?",
+            "source": "hn", "source_name": src_name,
+            "icp_segment": "seg_merchant_dtc",
+            "score": 0.92, "processed": False, "suppressed_reason": None,
+            "ts": datetime.now(UTC),
+        }).inserted_id
+        _register_cleanup(lambda n=src_name:
+                          db[Coll.SIGNAL_SOURCES].delete_many({"name": n}))
+        _register_cleanup(lambda u=chain_url:
+                          db[Coll.SIGNALS].delete_many({"evidence_url": u}))
+
+        # Real router tick against the real API.
+        out = signal_router.run_once(db=db, api_url=base)
+        enq = out.get("enqueued", [])
+        ours = [e for e in enq if e.get("signal_id") == str(sig_id)]
+        if out.get("status") != "ok" or not ours:
+            s.fail("router_chain",
+                   f"router did not enqueue the seeded signal "
+                   f"(status={out.get('status')}, enqueued={len(enq)})")
+        else:
+            job_id = ours[0].get("job_id")
+            sig = db[Coll.SIGNALS].find_one({"_id": sig_id}) or {}
+            # The real /api/draft must have created a job, and the signal must
+            # be marked processed with the job back-ref.
+            jr = requests.get(f"{base}/api/draft/{job_id}", timeout=10)
+            job_ok = jr.ok and jr.json().get("status") in (
+                "queued", "running", "done", "failed", "pending")
+            if not (sig.get("processed") and sig.get("router_job_id") == job_id
+                    and job_ok):
+                s.fail("router_chain",
+                       f"chain incomplete: processed={sig.get('processed')} "
+                       f"router_job_id={sig.get('router_job_id')!r} "
+                       f"job_http_ok={jr.ok} channel={ours[0].get('channel')!r}")
+            else:
+                # Best-effort: clean the spawned action once it lands.
+                _register_cleanup(lambda j=job_id: db["actions"].delete_many(
+                    {"router_job_id": j}))
+                s.pass_("router_chain",
+                        f"real signal_router.run_once enqueued signal "
+                        f"{str(sig_id)[:8]}… → /api/draft job {str(job_id)[:8]}… "
+                        f"(channel={ours[0].get('channel')!r}); signal marked "
+                        f"processed with back-ref")
+    except Exception as e:
+        s.fail("router_chain", f"PRD-02 chain failed: {e}")
+
     return s
 
 

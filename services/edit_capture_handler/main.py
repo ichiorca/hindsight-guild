@@ -123,7 +123,7 @@ def handle():
 
     if decision in ("edit", "reject"):
         edit_id = f"edit_{hashlib.sha256(f'{tid}{now}'.encode()).hexdigest()[:12]}"
-        BQ.insert_rows_json(f"{PROJECT_ID}.training.edits", [{
+        edit_row = {
             "edit_id": edit_id,
             "telemetry_id": tid,
             "ts": now,
@@ -131,7 +131,16 @@ def handle():
             "after_text": p.get("approved_text", ""),
             "edit_categories": classification.get("edit_categories", []),
             "rejection_reason": p.get("rejection_reason"),
-        }])
+        }
+        # BigQuery is the system of record for training.edits; mirror to Mongo
+        # so the row survives and is readable in LOCAL_DEV (no BQ client).
+        if BQ is not None:
+            BQ.insert_rows_json(f"{PROJECT_ID}.training.edits", [edit_row])
+        try:
+            mongo_tools.db()["training.edits"].update_one(
+                {"edit_id": edit_id}, {"$set": edit_row}, upsert=True)
+        except Exception as e:  # noqa: BLE001 — telemetry mirror is best-effort
+            log.warning("training.edits mongo mirror failed for %s: %s", tid, e)
 
     if decision == "reject":
         rejection_category = classification.get("rejection_category") or "tone"
@@ -154,6 +163,14 @@ def handle():
     approval_doc = {
         "telemetry_id": tid,
         "decision": decision,
+        # approved_text + original_draft must be on the approvals row: the
+        # PRD-03 voice miner reads approvals.approved_text (vs actions.raw for
+        # the before-text). Without these the cloud-handler path starved the
+        # voice miner while the durable web_api path fed it — now both write
+        # the same fields.
+        "original_draft": p.get("original_draft", ""),
+        "approved_text": p.get("approved_text", ""),
+        "rejection_reason": p.get("rejection_reason"),
         "decided_by": p.get("decided_by"),
         "decided_at": datetime.now(UTC),
         "channel": p.get("channel"),

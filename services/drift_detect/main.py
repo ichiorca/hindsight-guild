@@ -42,7 +42,14 @@ def main():
 
 
 def _detect_drift(rubric: str) -> list[dict]:
-    """Find (channel, day) cells where today's mean dropped > threshold vs trailing 28d."""
+    """Find (channel, day) cells where today's mean dropped > threshold vs trailing 28d.
+
+    BigQuery is primary; LOCAL_DEV (no BQ client) runs the identical recent-vs-
+    baseline aggregation over the dual-written Mongo ``actions`` collection."""
+    if BQ is None:
+        from shared import telemetry_reads
+        return telemetry_reads.drift_cells(
+            rubric, threshold=DRIFT_THRESHOLD, min_sample=MIN_SAMPLE)
     sql = f"""
     WITH today AS (
       SELECT channel,

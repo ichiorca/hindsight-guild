@@ -88,18 +88,14 @@ def _maybe_expire(row) -> None:
         ).result()
 
 
-def _maybe_decide_experiment(telemetry_id: str, outcome_value: float) -> None:
-    """Look up the experiment for this telemetry_id; transition state when decision rule met.
+def _experiment_for(telemetry_id: str):
+    """(experiment_id, variant_id) for a telemetry_id, or None.
 
-    experiments.success_metric is the SLOT NAME (e.g. 'engagement_72h'), not
-    the bare metric. Two experiments observing the same metric at different
-    horizons (24h vs 72h) are different success_metrics.
-
-    Eval-score-backed experiments (success_metric ends in '_score') are
-    decided from telemetry.actions.eval_scores instead. NOTE: this branch is
-    only reached when an outcome slot fills, so eval-score-backed experiments
-    need a separate cron (deferred to week 2 per DECISIONS.md).
-    """
+    BigQuery is primary; LOCAL_DEV (no BQ client) reads the dual-written Mongo
+    ``actions`` collection."""
+    if BQ is None:
+        from shared import telemetry_reads
+        return telemetry_reads.action_experiment_for(telemetry_id)
     result = BQ.query(
         f"""
         SELECT experiment_id, variant_id FROM `{PROJECT_ID}.telemetry.actions`
@@ -110,15 +106,20 @@ def _maybe_decide_experiment(telemetry_id: str, outcome_value: float) -> None:
         ]),
     ).result()
     row = next(iter(result), None)
-    if not row or not row.experiment_id:
-        return
+    if not row:
+        return None
+    return (row.experiment_id, row.variant_id)
 
-    exp = mongo_tools.find_one("experiments", {"_id": row.experiment_id})
-    if not exp or exp.get("state") != "running":
-        return
 
-    success_metric = exp["success_metric"]
+def _variant_stats(experiment_id: str, success_metric: str) -> dict:
+    """Per-variant ``{variant_id: (mean_val, n)}`` for the decision.
 
+    For ``*_score`` metrics, averages eval_scores; otherwise joins filled
+    outcome slots. BigQuery primary; LOCAL_DEV falls back to the identical
+    Mongo aggregation over the dual-written ``actions`` / ``outcomes``."""
+    if BQ is None:
+        from shared import telemetry_reads
+        return telemetry_reads.experiment_variant_stats(experiment_id, success_metric)
     if success_metric.endswith("_score"):
         rubric = success_metric.replace("_score", "")
         summary = BQ.query(
@@ -131,7 +132,7 @@ def _maybe_decide_experiment(telemetry_id: str, outcome_value: float) -> None:
             GROUP BY variant_id
             """,
             job_config=bigquery.QueryJobConfig(query_parameters=[
-                bigquery.ScalarQueryParameter("exp", "STRING", row.experiment_id),
+                bigquery.ScalarQueryParameter("exp", "STRING", experiment_id),
             ]),
         ).result()
     else:
@@ -145,12 +146,40 @@ def _maybe_decide_experiment(telemetry_id: str, outcome_value: float) -> None:
             GROUP BY a.variant_id
             """,
             job_config=bigquery.QueryJobConfig(query_parameters=[
-                bigquery.ScalarQueryParameter("exp", "STRING", row.experiment_id),
+                bigquery.ScalarQueryParameter("exp", "STRING", experiment_id),
                 bigquery.ScalarQueryParameter("slot", "STRING", success_metric),
             ]),
         ).result()
+    return {r.variant_id: (r.mean_val, r.n) for r in summary}
 
-    by_variant = {r.variant_id: (r.mean_val, r.n) for r in summary}
+
+def _maybe_decide_experiment(telemetry_id: str, outcome_value: float) -> None:
+    """Look up the experiment for this telemetry_id; transition state when decision rule met.
+
+    experiments.success_metric is the SLOT NAME (e.g. 'engagement_72h'), not
+    the bare metric. Two experiments observing the same metric at different
+    horizons (24h vs 72h) are different success_metrics.
+
+    Eval-score-backed experiments (success_metric ends in '_score') are
+    decided from telemetry.actions.eval_scores instead. NOTE: this branch is
+    only reached when an outcome slot fills, so eval-score-backed experiments
+    need a separate cron (deferred to week 2 per DECISIONS.md).
+
+    Data reads go through _experiment_for / _variant_stats, which use BigQuery
+    in prod and the dual-written Mongo collections in LOCAL_DEV — the decision
+    logic below is identical either way.
+    """
+    ref = _experiment_for(telemetry_id)
+    if not ref or not ref[0]:
+        return
+    experiment_id = ref[0]
+
+    exp = mongo_tools.find_one("experiments", {"_id": experiment_id})
+    if not exp or exp.get("state") != "running":
+        return
+
+    success_metric = exp["success_metric"]
+    by_variant = _variant_stats(experiment_id, success_metric)
     if len(by_variant) < 2:
         return
 
@@ -162,7 +191,7 @@ def _maybe_decide_experiment(telemetry_id: str, outcome_value: float) -> None:
         runner, (runner_mean, _) = ranked[1]
         if winner_mean - runner_mean >= mde:
             mongo_tools.transition_experiment_state(
-                row.experiment_id, "decided",
+                experiment_id, "decided",
                 result={"winner": winner,
                         "lift": winner_mean - runner_mean,
                         "n": min_n},
