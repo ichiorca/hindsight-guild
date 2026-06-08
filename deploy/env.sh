@@ -136,11 +136,17 @@ SECRETS_FOR_AGENTS=(
 # MODEL_HEAVY=gemini-2.5-flash / MODEL_LIGHT=gemini-2.5-flash-lite.
 MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-3.5-flash},MODEL_LIGHT=${MODEL_LIGHT:-gemini-3.1-flash-lite}"
 
+# Diagram renderer URL — shared/diagrams.py reads MERMAID_RENDERER_URL to render
+# infographic/excalidraw diagrams (image_brief). Resolved from the live
+# mermaid-renderer service (deployed independently); empty if it isn't up yet,
+# in which case diagrams degrade to a "pending" stub until the next deploy.
+MERMAID_RENDERER_URL="$(gcloud run services describe mermaid-renderer --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)' 2>/dev/null || true)"
+
 # genai client config for the agents. USE_VERTEXAI=false -> Gemini Developer API
 # (reads GOOGLE_API_KEY, mounted from Secret Manager via GENAI_SECRETS). 3.x is
 # served there but 404s on Vertex for this project. The Vertex AI *Eval* service
 # (shared/rubrics.py) is independent of this flag and keeps running on Vertex.
-GENAI="GOOGLE_GENAI_USE_VERTEXAI=false,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},${MODELS}"
+GENAI="GOOGLE_GENAI_USE_VERTEXAI=false,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},${MODELS}"
 
 # Mounted as an env var (Cloud Run --set-secrets) so the Developer-API genai
 # client can authenticate. sa-agents gets secretAccessor via SECRETS_FOR_AGENTS.
