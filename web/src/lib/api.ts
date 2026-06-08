@@ -625,7 +625,11 @@ interface DraftJob {
 }
 
 const DRAFT_POLL_INTERVAL_MS = 2_000;
-const DRAFT_POLL_MAX_ATTEMPTS = 90;   // ~3 min ceiling
+// ~6 min ceiling. Must exceed the web-api → pipeline read timeout (300s in
+// services/web_api/routers/drafting.py) so the UI sees the final done/failed
+// state rather than giving up early — gemini-2.5-pro drafts run ~4-5 min, so a
+// 3-min budget timed out the UI even though the job completed + landed.
+const DRAFT_POLL_MAX_ATTEMPTS = 180;
 
 export function useDraft() {
   return useMutation({
