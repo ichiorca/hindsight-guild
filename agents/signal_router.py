@@ -33,10 +33,21 @@ from shared import mongo_tools
 
 log = logging.getLogger(__name__)
 
-# Rate-limit ceilings — match PRD-02 §8.
-MAX_PER_TICK = 5
+# Rate-limit ceilings — match PRD-02 §8. The per-tick cap is configurable per
+# environment via SIGNAL_MAX_PER_TICK (default 3) so you can throttle/burst
+# without a code change (e.g. lower while testing, higher in prod).
+DEFAULT_MAX_PER_TICK = 3
 MAX_PER_24H_PER_ICP = 20
 DUPLICATE_SUPPRESSION_DAYS = 7
+
+
+def _max_per_tick() -> int:
+    """Max auto-drafts enqueued per router tick (env SIGNAL_MAX_PER_TICK, default 3)."""
+    try:
+        return max(1, int(os.environ.get("SIGNAL_MAX_PER_TICK",
+                                         str(DEFAULT_MAX_PER_TICK))))
+    except ValueError:
+        return DEFAULT_MAX_PER_TICK
 
 # Default API URL for the in-process FastAPI server. Tests override via
 # the ``api_url`` argument to run_once().
@@ -139,13 +150,16 @@ def run_once(db=None, api_url: str | None = None) -> dict:
     # pymongo Database objects don't support bool() — explicit None check.
     db = db if db is not None else mongo_tools.db()
     api_url = (api_url or _DEFAULT_API_URL).rstrip("/")
+    cap = _max_per_tick()
 
     pending = list(db["signals"].find({
         "processed": False,
         "suppressed_reason": None,
-    }).sort([("score", -1), ("ts", 1)]).limit(MAX_PER_TICK * 4))
-    # Pull 4x cap so we have headroom to skip duplicates/over-quota items
-    # without re-querying.
+    }).sort([("score", -1), ("ts", 1)]).limit(max(cap * 4, 100)))
+    # Pull a generous window (>= 100) so the channel round-robin below can see
+    # lower-scoring channels too — otherwise a high-volume high-score channel
+    # would crowd them out of a tiny cap*4 pull. Still bounded so a large
+    # backlog can't load unboundedly; dedup/over-quota headroom is included.
 
     if not pending:
         return {"status": "no_pending", "enqueued": [], "suppressed": [], "total_enqueued": 0}
@@ -168,10 +182,16 @@ def run_once(db=None, api_url: str | None = None) -> dict:
     # Source docs are needed for default_channel + topic_hint_template
     # decisions. Pull them once.
     source_docs = {s["name"]: s for s in db["signal_sources"].find({})}
-    # signals carry source kind but not source name; we look up by
-    # icp_segment + source kind heuristic (1 source per (kind, icp)
-    # is the typical seed).
+
     def _source_doc_for(signal: dict) -> dict:
+        # Exact match by the source NAME the watcher stamped on the signal.
+        # Required now that several sources can share a (kind, icp) pair
+        # (e.g. multiple rss/seg_merchant_dtc subreddits), each with its own
+        # default_channel + topic_hint_template. Fall back to the (kind, icp)
+        # heuristic for legacy signals written before source_name existed.
+        name = signal.get("source_name")
+        if name and name in source_docs:
+            return source_docs[name]
         s = signal.get("source")
         icp = signal.get("icp_segment")
         for doc in source_docs.values():
@@ -179,10 +199,25 @@ def run_once(db=None, api_url: str | None = None) -> dict:
                 return doc
         return {}
 
+    # Channel-diverse selection: group the score-sorted pending by the channel
+    # each signal would draft to, then round-robin across channels so a single
+    # tick spans draft types (LinkedIn + Substack + blog + …) instead of N of
+    # the same type. Score order is preserved within each channel, so the
+    # highest-scoring signal of each type is taken first.
+    from itertools import zip_longest
+    chan_of: dict = {}
+    by_channel: dict[str, list] = {}
+    for _sig in pending:
+        _ch = _decide_channel(_sig, _source_doc_for(_sig))
+        chan_of[_sig["_id"]] = _ch
+        by_channel.setdefault(_ch, []).append(_sig)
+    ordered = [s for grp in zip_longest(*by_channel.values())
+               for s in grp if s is not None]
+
     dup_since = datetime.now(UTC) - timedelta(days=DUPLICATE_SUPPRESSION_DAYS)
 
-    for signal in pending:
-        if len(enqueued) >= MAX_PER_TICK:
+    for signal in ordered:
+        if len(enqueued) >= cap:
             break
 
         sid = signal["_id"]
@@ -222,7 +257,7 @@ def run_once(db=None, api_url: str | None = None) -> dict:
             continue
 
         source_doc = _source_doc_for(signal)
-        channel = _decide_channel(signal, source_doc)
+        channel = chan_of[signal["_id"]]
         topic_hint = _build_topic_hint(signal, source_doc)
 
         # Enqueue via /api/draft. The triggered_by_signal_id back-ref
@@ -231,7 +266,7 @@ def run_once(db=None, api_url: str | None = None) -> dict:
         # chip + /signals deep-link rely on.
         payload = {
             "channel": channel,
-            "icp_segment": icp or "seg_founder_b2b",
+            "icp_segment": icp or "seg_merchant_dtc",
             "topic_hint": topic_hint,
             "triggered_by_signal_id": str(sid),
         }

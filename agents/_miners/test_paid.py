@@ -60,7 +60,7 @@ def _make_variant(tag, name, **kw):
         "name":            f"{tag}_{name}",
         "status":          "running",
         "platform":        "google_ads",
-        "icp_segment":     "seg_founder_b2b",
+        "icp_segment":     "seg_merchant_dtc",
         "experiment_id":   f"{tag}_exp1",
         "external_id":     f"ad_{name}",
         "spend_24h":       150.0,

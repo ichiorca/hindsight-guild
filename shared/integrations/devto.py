@@ -92,10 +92,10 @@ def derive_tags(icp_segment: str | None, topic_hint: str | None) -> list[str]:
     # Map ICP → audience tag
     if icp_segment:
         icp_tag = {
-            "seg_founder_b2b":      "startup",
-            "seg_revops_director":  "revops",
-            "seg_ae_growth":        "sales",
-            "seg_pmm_growth":       "marketing",
+            "seg_merchant_dtc":     "ecommerce",
+            "seg_ecom_leader":      "ecommerce",
+            "seg_payments_network": "fintech",
+            "seg_agent_platform":   "ai",
         }.get(icp_segment)
         if icp_tag and icp_tag not in tags:
             tags.append(icp_tag)

@@ -3,7 +3,7 @@ Finalizer pipeline.
 
 Auto-loads .env from the repo root so a single command works:
 
-    python -m demo.run_pipeline --icp seg_founder_b2b --channel substack \\
+    python -m demo.run_pipeline --icp seg_merchant_dtc --channel substack \\
         --topic "post-LLM GTM motion"
 
 Requires (local-dev path):
@@ -71,7 +71,7 @@ _SKILL_BY_CHANNEL = {
 
 async def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--icp", required=True, help="e.g. seg_founder_b2b")
+    p.add_argument("--icp", required=True, help="e.g. seg_merchant_dtc")
     p.add_argument("--channel", default="linkedin",
                    choices=("linkedin", "email", "blog", "substack"))
     p.add_argument("--experiment_id", default=None)

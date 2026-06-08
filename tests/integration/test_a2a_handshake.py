@@ -35,7 +35,7 @@ def test_call_research_agent_via_a2a():
 
     result = call_agent(
         "research",
-        "List the top 3 customer voice themes for ICP seg_revops_director.",
+        "List the top 3 customer voice themes for ICP seg_ecom_leader.",
     )
 
     # JSON-RPC envelope; the actual task result is in result['result']

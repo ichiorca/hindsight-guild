@@ -9,6 +9,7 @@ Coverage per PRD-02 §12 M2:
 """
 from __future__ import annotations
 
+import os
 from unittest.mock import patch
 
 from scripts.signals import hn_adapter, reddit_adapter, rss_adapter
@@ -203,6 +204,77 @@ def test_reddit_base_score():
     assert reddit_adapter.base_score({"score": 10, "num_comments": 5}) == 0.75
     # supports `ups` fallback
     assert reddit_adapter.base_score({"ups": 5, "num_comments": 0}) == 0.4
+
+
+# ---------------------------------------------------------------------------
+# Reddit OAuth path (REDDIT_USE_OAUTH=1) — network stubbed
+# ---------------------------------------------------------------------------
+
+def test_reddit_oauth_path_uses_bearer_token():
+    """With the flag on + a token available, the adapter hits oauth.reddit.com
+    with an Authorization: bearer header (same parsing as the public path)."""
+    reddit_adapter.reset_token_cache()
+    captured: dict = {}
+
+    def fake_get(url, params=None, headers=None, **kw):
+        captured["url"] = url
+        captured["headers"] = headers or {}
+        return _FakeResp(_REDDIT_PAYLOAD)
+
+    source = {"name": "reddit-test", "config": {"subreddit": "ecommerce"}, "cursor": None}
+    with patch.dict(os.environ, {"REDDIT_USE_OAUTH": "1"}, clear=False), \
+         patch.object(reddit_adapter, "_get_oauth_token", return_value="tok123"), \
+         patch.object(reddit_adapter.httpx, "get", side_effect=fake_get):
+        events = reddit_adapter.poll(source)
+
+    assert captured["url"] == "https://oauth.reddit.com/r/ecommerce/new"
+    assert captured["headers"].get("Authorization") == "bearer tok123"
+    assert len(events) == 2  # parsing unchanged; removed post dropped
+
+
+def test_reddit_oauth_falls_back_to_public_without_token():
+    """Flag on but no token (missing creds) → public .json path, no auth header."""
+    reddit_adapter.reset_token_cache()
+    captured: dict = {}
+
+    def fake_get(url, params=None, headers=None, **kw):
+        captured["url"] = url
+        captured["headers"] = headers or {}
+        return _FakeResp(_REDDIT_PAYLOAD)
+
+    source = {"name": "reddit-test", "config": {"subreddit": "ecommerce"}, "cursor": None}
+    with patch.dict(os.environ, {"REDDIT_USE_OAUTH": "1"}, clear=False), \
+         patch.object(reddit_adapter, "_get_oauth_token", return_value=None), \
+         patch.object(reddit_adapter.httpx, "get", side_effect=fake_get):
+        reddit_adapter.poll(source)
+
+    assert captured["url"] == "https://www.reddit.com/r/ecommerce/new.json"
+    assert "Authorization" not in captured["headers"]
+
+
+def test_reddit_oauth_token_fetch_and_cache():
+    """Token is fetched once (client_credentials when no user/pass) and cached."""
+    reddit_adapter.reset_token_cache()
+    calls = {"n": 0}
+
+    def fake_post(url, data=None, auth=None, headers=None, **kw):
+        calls["n"] += 1
+        calls["grant"] = (data or {}).get("grant_type")
+        calls["auth"] = auth
+        return _FakeResp({"access_token": "abc", "expires_in": 3600})
+
+    with patch.dict(os.environ, {"REDDIT_USE_OAUTH": "1",
+                                 "REDDIT_CLIENT_ID": "cid",
+                                 "REDDIT_CLIENT_SECRET": "csecret"}, clear=False), \
+         patch.object(reddit_adapter.httpx, "post", side_effect=fake_post):
+        t1 = reddit_adapter._get_oauth_token()
+        t2 = reddit_adapter._get_oauth_token()   # served from cache
+
+    assert t1 == "abc" and t2 == "abc"
+    assert calls["n"] == 1                         # only one token request
+    assert calls["grant"] == "client_credentials"  # no user/pass → app-only
+    assert calls["auth"] == ("cid", "csecret")
+    reddit_adapter.reset_token_cache()
 
 
 # ---------------------------------------------------------------------------

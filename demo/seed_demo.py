@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import random
+import sys
 from datetime import UTC, datetime, timedelta
 
 from google.cloud import bigquery, storage
@@ -42,48 +43,60 @@ RNG = random.Random(42)
 NOW = datetime(2026, 5, 26, 9, 0, tzinfo=UTC)
 
 PROJECT_ID = os.environ["PROJECT_ID"]
-BQ = bigquery.Client(project=PROJECT_ID)
+
+# Lazy BigQuery client — constructed on first use, AFTER the production guard in
+# main()/_wipe() has run. Building it at import time would (a) require cloud
+# credentials just to import the module and (b) run before the guard, so a
+# missing-creds error could mask the "refusing to wipe" refusal.
+_BQ: bigquery.Client | None = None
+
+
+def _bq() -> bigquery.Client:
+    global _BQ
+    if _BQ is None:
+        _BQ = bigquery.Client(project=PROJECT_ID)
+    return _BQ
 
 # ICP / voice / claim corpus for synthesizing demo draft bodies. Seeded into
 # every Content action's `raw` block so the Approval Queue card has real text
 # to render — without this, the UI shows empty channel-native previews.
 SEED_ICPS = [
-    "seg_revops_director",
-    "seg_founder_b2b",
-    "seg_pmm_growth",
+    "seg_merchant_dtc",
+    "seg_ecom_leader",
+    "seg_agent_platform",
 ]
 
 SEED_VOICE_BY_ICP = {
-    "seg_revops_director": [
-        "Our pipeline visibility was a black box until forecasts started missing by 30%.",
-        "Half our reps spend Friday afternoons cleaning Salesforce instead of closing.",
+    "seg_merchant_dtc": [
+        "We thought we were ChatGPT-ready until a test agent failed at checkout.",
+        "A protocol update broke our agent checkout twice last quarter — silently.",
     ],
-    "seg_founder_b2b": [
-        "We were shipping fast but the GTM motion never caught up.",
-        "Every demo felt like a custom build — nothing repeatable.",
+    "seg_ecom_leader": [
+        "Leadership asked 'are we agent-ready?' and no one could answer with data.",
+        "AI-driven sessions convert differently and we had no instrumentation for them.",
     ],
-    "seg_pmm_growth": [
-        "Launches kept slipping because messaging review was the bottleneck.",
-        "I had no honest way to tell which positioning lift was real vs noise.",
+    "seg_agent_platform": [
+        "Our shopping agent passed demos and failed real merchant checkout flows.",
+        "Every merchant implements MCP slightly differently — we needed conformance signals.",
     ],
 }
 
 SEED_CLAIMS_BY_CHANNEL = {
     "linkedin": [
-        "Teams that automate the messaging review loop ship 2.3× more campaigns per quarter.",
-        "Drift on brand voice usually shows up 14 days before the metric does.",
+        "Stores that test agent flows pre-prod catch conformance gaps before a buyer ever hits them.",
+        "Protocol drift on agent checkout usually shows up 14 days before the revenue dip does.",
     ],
     "email": [
-        "Our nurture sequence converted 18% better after we cut three setup steps.",
-        "First-touch personalization beats generic intent data 4 weeks in a row.",
+        "An agent-readiness score gives your team one number to prioritize the work.",
+        "Naming the agent surface — ChatGPT, Gemini — in the subject lifts opens four weeks running.",
     ],
     "blog": [
-        "The fastest GTM teams I've talked to share one habit: they kill bad positioning early.",
-        "Most go-to-market debt isn't in the tools — it's in the handoffs between them.",
+        "The fastest commerce teams I've talked to share one habit: they simulate the agent before shipping.",
+        "Most lost AI-shopper revenue isn't in the catalog — it's in the protocol handoff at checkout.",
     ],
     "substack": [
-        "The post-LLM GTM motion isn't about more content — it's about closing the feedback loop faster.",
-        "Most marketing teams I talk to have 80% of the data they need; they just can't act on it.",
+        "Agentic commerce isn't about more content — it's about being machine-readable at the moment of purchase.",
+        "Most merchants have 80% of an agent-ready store; the last 20% is where the silent failures live.",
     ],
 }
 
@@ -202,7 +215,67 @@ def _synthesize_draft_raw(channel: str, icp: str, brand_voice: float,
     }
 
 
+# ---------------------------------------------------------------------------
+# Production guard — seed_demo is DESTRUCTIVE
+# ---------------------------------------------------------------------------
+# _wipe() delete_many()s EVERY Mongo collection + TRUNCATEs the BigQuery
+# telemetry tables, then restores ONLY synthetic demo data (transactional rows
+# go to BigQuery, never back into the Mongo `actions`/`outcomes` mirror). Run
+# against a real deployment it permanently destroys production data. This guard
+# makes that impossible by accident — the operator must explicitly name the
+# target project. See the data-loss postmortem in docs/.
+
+# Substrings that mark a project id as SAFE to wipe. Anything else is treated
+# as production by default (fail-safe).
+_NONPROD_MARKERS = ("-dev", "-test", "-local", "-staging", "-stage",
+                    "-mvp", "-demo", "-sandbox", "-ci", "-scratch")
+
+
+def _looks_like_prod(project_id: str) -> bool:
+    """True unless the project id carries an explicit non-prod marker.
+
+    Fail-safe: an unrecognised / unsuffixed project id counts as production so
+    the guard errs toward refusing rather than wiping.
+    """
+    pid = project_id.lower()
+    if "prod" in pid or "production" in pid:
+        return True
+    return not any(marker in pid for marker in _NONPROD_MARKERS)
+
+
+def _guard_destructive_run() -> None:
+    """Hard-stop unless the wipe is explicitly authorized for THIS project.
+
+    Authorized when either:
+      * ``SEED_DEMO_CONFIRM`` exactly equals ``PROJECT_ID`` (operator typed the
+        target project back — works for any project, including prod-named ones
+        when you genuinely mean it), or
+      * ``LOCAL_DEV`` is truthy AND the project id is not prod-looking.
+
+    Otherwise exits non-zero without touching any data.
+    """
+    confirm = os.environ.get("SEED_DEMO_CONFIRM", "")
+    local_dev = os.environ.get("LOCAL_DEV", "").lower() in ("1", "true", "yes")
+
+    if confirm and confirm == PROJECT_ID:
+        return
+    if local_dev and not _looks_like_prod(PROJECT_ID):
+        return
+
+    sys.exit(
+        "\nREFUSING TO RUN demo/seed_demo.py.\n"
+        f"  This WIPES every MongoDB collection and TRUNCATEs BigQuery for\n"
+        f"  project '{PROJECT_ID}', then restores only synthetic demo data.\n"
+        f"  '{PROJECT_ID}' looks like a real/unmarked project.\n\n"
+        "  If you are CERTAIN this is a throwaway/demo target, re-run with an\n"
+        "  explicit confirmation that names the project:\n\n"
+        f"      SEED_DEMO_CONFIRM={PROJECT_ID} python -m demo.seed_demo\n\n"
+        "  (Or set LOCAL_DEV=1 for a project named *-dev/-test/-local/-demo/…)\n"
+    )
+
+
 def main():
+    _guard_destructive_run()
     _wipe()
     _seed_calibration_sets_in_gcs()
     voice = _seed_mongo()
@@ -237,6 +310,7 @@ def _wipe():
     Drives off mongo.schema.COLLECTIONS so newly-added collections (e.g.,
     paid_variants, ops_incidents) don't leave stale rows after re-seed.
     """
+    _guard_destructive_run()  # defense-in-depth: also blocks direct _wipe() calls
     from mongo.schema import COLLECTIONS, DERIVED_COLLECTIONS, HISTORY_COLLECTIONS
 
     db = mongo_tools.db()
@@ -246,7 +320,7 @@ def _wipe():
         except Exception as e:
             log.warning("wipe %s failed: %s", c, e)
     for table in ["telemetry.actions", "telemetry.outcomes", "training.edits"]:
-        BQ.query(f"TRUNCATE TABLE `{PROJECT_ID}.{table}`").result()
+        _bq().query(f"TRUNCATE TABLE `{PROJECT_ID}.{table}`").result()
 
 
 # ---------------------------------------------------------------------------
@@ -335,10 +409,11 @@ def _seed_actions() -> list[dict]:
                     "email": "nurture_email",
                     "blog": "blog_outline",
                     "substack": "substack_post"}[channel]
-        skill_version = {"linkedin": "linkedin_post_v3.txt",
-                         "email": "nurture_email_v2.txt",
-                         "blog": "blog_outline_v1.txt",
-                         "substack": "substack_post_v1.txt"}[channel]
+        # Genesis baseline: every playbook is at v0 (see mongo/data/skills.py),
+        # so synthetic telemetry attributes to v0 too — otherwise the skills'
+        # history (["v0"]) and the actions' skill_version wouldn't reconcile and
+        # _aggregate_track_records / the promotion gate would see n=0.
+        skill_version = "v0"
         # For content actions, synthesize a believable draft body + review
         # flags + voice attribution so the Queue UI renders a non-empty card
         # without needing a real agent run. Non-content actions stay minimal.
@@ -380,7 +455,7 @@ def _seed_actions() -> list[dict]:
             "raw": seed_raw,
         }
         actions.append(action)
-    BQ.insert_rows_json(f"{PROJECT_ID}.telemetry.actions", actions)
+    _bq().insert_rows_json(f"{PROJECT_ID}.telemetry.actions", actions)
     return actions
 
 
@@ -400,7 +475,7 @@ def _seed_outcomes(actions) -> list[dict]:
                 "status": "filled" if filled else "pending",
             })
     if outcomes:
-        BQ.insert_rows_json(f"{PROJECT_ID}.telemetry.outcomes", outcomes)
+        _bq().insert_rows_json(f"{PROJECT_ID}.telemetry.outcomes", outcomes)
     return outcomes
 
 
@@ -435,7 +510,7 @@ def _seed_edits(actions) -> list[dict]:
             ]),
         })
     if rows:
-        BQ.insert_rows_json(f"{PROJECT_ID}.training.edits", rows)
+        _bq().insert_rows_json(f"{PROJECT_ID}.training.edits", rows)
     return rows
 
 

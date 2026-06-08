@@ -37,9 +37,9 @@ test("signals: /api/signals/sources returns at least the seeded 3 sources", asyn
   // Don't pin every name — schema may add more later — but require the
   // three M1 seeds.
   for (const seed of [
-    "hn-revops-handoff",
-    "reddit-saas-marketing",
-    "rss-google-ai-blog",
+    "hn-agentic-commerce",
+    "reddit-ecommerce",
+    "rss-google-news-agentic",
   ]) {
     expect(names, `seeded source ${seed} missing`).toContain(seed);
   }
@@ -65,7 +65,7 @@ test("signals: GET /api/signals returns an array (default 24h window)", async ({
 test("signals: POST /api/signals/manual inserts + immediately appears in list", async ({ request }) => {
   const url = `https://example.com/e2e-signal-${Date.now()}`;
   const post = await request.post("/api/signals/manual", {
-    data: { url, icp_segment: "seg_founder_b2b" },
+    data: { url, icp_segment: "seg_merchant_dtc" },
   });
   expect(post.ok()).toBeTruthy();
   const body = await post.json();
@@ -84,7 +84,7 @@ test("signals: POST /api/signals/{id}/suppress flips the suppressed_reason", asy
   // Insert a manual signal so we have an ID to suppress.
   const url = `https://example.com/e2e-suppress-${Date.now()}`;
   const ins = await request.post("/api/signals/manual", {
-    data: { url, icp_segment: "seg_founder_b2b" },
+    data: { url, icp_segment: "seg_merchant_dtc" },
   });
   const { signal_id } = await ins.json();
   expect(signal_id).toBeTruthy();
@@ -139,9 +139,9 @@ test("signals: /signals route renders header + source-health table", async ({ pa
 
   // The seeded source names should appear in the table.
   for (const seed of [
-    "hn-revops-handoff",
-    "reddit-saas-marketing",
-    "rss-google-ai-blog",
+    "hn-agentic-commerce",
+    "reddit-ecommerce",
+    "rss-google-news-agentic",
   ]) {
     await expect(page.getByText(seed).first()).toBeVisible();
   }
@@ -188,7 +188,7 @@ test("signals: Queue card gains 'Triggered by' chip when a signal back-refs an a
   const ins = await request.post("/api/signals/manual", {
     data: {
       url,
-      icp_segment: "seg_revops_director",
+      icp_segment: "seg_ecom_leader",
       channel: "blog",
     },
   });

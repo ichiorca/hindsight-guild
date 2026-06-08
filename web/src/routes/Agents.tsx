@@ -117,7 +117,7 @@ export default function AgentsPage() {
  * Voice gets a paste-area, ops_qa hides channel, etc.
  */
 function QuickHandoff({ agent }: { agent: AgentRosterEntry }) {
-  const [icp, setIcp] = useState("seg_founder_b2b");
+  const [icp, setIcp] = useState("seg_merchant_dtc");
   const [channel, setChannel] = useState(defaultChannelFor(agent.agent_id));
   const [topic, setTopic] = useState("");
   const draft = useDraft();

@@ -1,4 +1,4 @@
-"""Experiment registry seed — 3 decided + 2 running.
+"""Experiment registry seed — 3 decided + 2 running (agentic commerce).
 
 Each experiment has:
   - hypothesis (one-sentence falsifiable)
@@ -22,9 +22,9 @@ NOW = datetime(2026, 5, 26, 9, 0, tzinfo=UTC)
 EXPERIMENTS: list[dict] = [
     {
         "_id": "exp_linkedin_hooks_q1",
-        "title": "Question-format hooks beat statement-format for RevOps",
+        "title": "Question-format hooks beat statement-format for merchants",
         "hypothesis": "Question-format LinkedIn hooks lift engagement >=20% vs statement.",
-        "icp_segment": "seg_revops_director",
+        "icp_segment": "seg_merchant_dtc",
         "channel": "linkedin",
         "variants": [
             {"id": "A_statement",
@@ -41,20 +41,21 @@ EXPERIMENTS: list[dict] = [
         "created_at": NOW - timedelta(days=25),
         "decided_at": NOW - timedelta(days=12),
         "result": {"winner": "B_question", "lift": 0.23, "p_value": 0.04},
-        "lesson": "Question-format hooks lift engagement 23% on RevOps. Promote v3.",
+        "lesson": ("'Is your store agent-ready?'-style question hooks lift "
+                   "engagement 23% on merchants. Promote v3."),
         "tags": ["linkedin", "hooks"],
     },
     {
         "_id": "exp_subject_line_personalization",
-        "title": "First-name personalization lifts open rate on RevOps nurture",
-        "hypothesis": "First-name personalization lifts open rate by >=3pp.",
-        "icp_segment": "seg_revops_director",
+        "title": "Platform-named subject lines lift open rate on e-comm leaders",
+        "hypothesis": "Naming the agent surface (ChatGPT/Gemini) lifts open rate by >=3pp.",
+        "icp_segment": "seg_ecom_leader",
         "channel": "email",
         "variants": [
             {"id": "A_generic",
              "playbook_version": "nurture_email_v1.txt",
              "allocation_pct": 50},
-            {"id": "B_personalized",
+            {"id": "B_named_surface",
              "playbook_version": "nurture_email_v2.txt",
              "allocation_pct": 50},
         ],
@@ -63,8 +64,8 @@ EXPERIMENTS: list[dict] = [
         "state": "decided",
         "created_at": NOW - timedelta(days=30),
         "decided_at": NOW - timedelta(days=20),
-        "result": {"winner": "B_personalized", "lift": 0.041, "p_value": 0.02},
-        "lesson": "First-name lift +4.1pp. Promote v2 as default subject template.",
+        "result": {"winner": "B_named_surface", "lift": 0.041, "p_value": 0.02},
+        "lesson": "Naming the agent surface lifts opens +4.1pp. Promote v2 default.",
         "tags": ["email", "personalization"],
     },
     {
@@ -87,10 +88,10 @@ EXPERIMENTS: list[dict] = [
         "tags": ["drift", "investigation"],
     },
     {
-        "_id": "exp_hero_copy_pricing_page",
-        "title": "Outcome-led hero beats feature-led for SaaS founders",
-        "hypothesis": "Outcome-led hero copy lifts trial signup by >=15%.",
-        "icp_segment": "seg_saas_founder",
+        "_id": "exp_hero_copy_readiness",
+        "title": "Outcome-led hero ('stop losing AI sales') beats feature-led",
+        "hypothesis": "Outcome-led hero copy lifts demo signup by >=15% for merchants.",
+        "icp_segment": "seg_merchant_dtc",
         "channel": "landing_page",
         "variants": [
             {"id": "A_feature",
@@ -100,7 +101,7 @@ EXPERIMENTS: list[dict] = [
              "playbook_version": "landing_v1_candidate.txt",
              "allocation_pct": 50},
         ],
-        "success_metric": "trial_signup_24h",
+        "success_metric": "demo_signup_24h",
         "mde": 0.15,
         "state": "running",
         "created_at": NOW - timedelta(days=4),
@@ -110,7 +111,7 @@ EXPERIMENTS: list[dict] = [
         "_id": "exp_meta_creative_visual_density",
         "title": "Low-density creative outperforms detailed creative on Meta",
         "hypothesis": "Sparse creative lifts CTR >=20% vs detail-dense.",
-        "icp_segment": "seg_ae_growth",
+        "icp_segment": "seg_ecom_leader",
         "channel": "meta_ads",
         "variants": [
             {"id": "A_dense", "playbook_version": "meta_v1.txt",

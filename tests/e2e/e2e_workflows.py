@@ -127,61 +127,66 @@ async def _run_agent(
 
 VOICE_TRANSCRIPTS = [
     {
-        "icp": "seg_founder_b2b",
+        "icp": "seg_merchant_dtc",
         "source_kind": "sales_call",
         "raw_text": (
-            "[Sales call: 2026-04-12 with Maya, founder of a 22-person devtools "
-            "startup]\n\n"
-            "Maya: We tried Hubspot's sequences last quarter. The handoff from SDR "
-            "to AE was the worst part — by the time the AE picked it up, the prospect "
-            "had already cooled off. Half the context was missing.\n\n"
-            "Sales rep: That's actually a really common pattern. We see it most with "
-            "teams that bolted CSM on after sales rather than designing it together.\n\n"
-            "Maya: Yeah, our retention is fine but expansion is dead. Every "
-            "renewal feels like a cold start. If you could tell me what to actually do "
-            "differently in the first 30 days, I'd care about that more than another "
-            "dashboard. We don't need more data, we need to know what to do with it.\n\n"
-            "Sales rep: Got it — so the gap is between observing churn risk and "
-            "knowing the move.\n\n"
-            "Maya: Exactly. And honestly, the email automation tools all feel like "
-            "they were built for 2019. Nobody's pulling in real product telemetry."
+            "[Sales call: 2026-04-12 with Maya, founder of a 22-person DTC "
+            "skincare brand]\n\n"
+            "Maya: We found out the hard way that our store fails silently in "
+            "ChatGPT Shop. A customer tried to buy through the agent and checkout "
+            "just dropped — no error, no order. We only caught it because she "
+            "emailed us.\n\n"
+            "Sales rep: That's actually a really common pattern. We see it most "
+            "with brands whose product feed isn't machine-readable, so the buyer "
+            "agent can't complete the ACP handoff.\n\n"
+            "Maya: Yeah, our traffic is fine but AI-shopper revenue is basically "
+            "zero. Every agent checkout feels like a coin flip. If you could tell "
+            "me exactly where we're not agent-ready, I'd care about that more than "
+            "another analytics dashboard. We don't need more data, we need to know "
+            "what to fix.\n\n"
+            "Sales rep: Got it — so the gap is between knowing agents visit and "
+            "knowing whether they can actually transact.\n\n"
+            "Maya: Exactly. And honestly, nobody's testing this. We have no way to "
+            "simulate a buyer agent hitting our checkout before it goes live."
         ),
     },
     {
-        "icp": "seg_revops_director",
+        "icp": "seg_ecom_leader",
         "source_kind": "nps",
         "raw_text": (
             "[NPS verbatim responses, March 2026 cohort]\n\n"
-            "1. \"The integration with Salesforce takes weeks to get right. I'd give a 9 "
-            "if you had a one-click connector for the standard objects.\" — Mid-market "
-            "RevOps lead, scored 7\n\n"
-            "2. \"Best decision we made this quarter. We replaced three tools with this. "
-            "Saves the team probably 6 hours a week on attribution clean-up.\" — VP "
-            "RevOps, scored 10\n\n"
-            "3. \"Honestly the alerting is too noisy. I muted half the channels and now "
-            "I'm worried I'll miss something real.\" — RevOps director, scored 5\n\n"
-            "4. \"My CSMs ask me weekly why the renewal forecast doesn't match what they "
-            "see in their account view. We're spending more time reconciling than "
-            "forecasting.\" — RevOps director, scored 6"
+            "1. \"Getting UCP and ACP conformance right took weeks of guessing. I'd "
+            "give a 9 if you had a one-click protocol diagnostic for the standard "
+            "surfaces.\" — Mid-market head of e-commerce, scored 7\n\n"
+            "2. \"Best decision we made this quarter. Your fault injection caught "
+            "three conformance gaps before we shipped to Copilot Checkout. Saved us "
+            "an embarrassing launch.\" — VP E-commerce, scored 10\n\n"
+            "3. \"Honestly the alerting is too noisy. I muted half the channels and "
+            "now I'm worried I'll miss real protocol drift.\" — E-commerce leader, "
+            "scored 5\n\n"
+            "4. \"My team asks me weekly why our agent-readiness score doesn't match "
+            "what they see live in Gemini Shopping. We spend more time reconciling "
+            "than fixing.\" — E-commerce leader, scored 6"
         ),
     },
     {
-        "icp": "seg_ae_growth",
+        "icp": "seg_agent_platform",
         "source_kind": "churn_interview",
         "raw_text": (
             "[Churn interview transcript: 2026-04-30, departing customer Jordan, "
-            "AE/Growth at a 50-person SaaS]\n\n"
+            "agent platform / builder at a 50-person commerce-agent startup]\n\n"
             "Jordan: Look, the product is fine. The problem is nobody on my team "
-            "actually used the AI suggestions. They felt generic — like they were written "
-            "for some imaginary BDR, not for what we sell.\n\n"
-            "Interviewer: Did the customization options not help?\n\n"
-            "Jordan: We tried. But every time we tweaked it, the next batch of "
-            "suggestions snapped back to the default voice. It was like fighting the "
-            "system to make it sound like us.\n\n"
+            "actually trusted the conformance reports. They felt generic — like they "
+            "were written for some imaginary MCP integration, not the AP2 and x402 "
+            "flows we actually ship.\n\n"
+            "Interviewer: Did the custom protocol profiles not help?\n\n"
+            "Jordan: We tried. But every time we tuned a diagnostic, the next sweep "
+            "snapped back to the default protocol set. It was like fighting the "
+            "system to make it test the surfaces our buyer agents really hit.\n\n"
             "Interviewer: That's really useful. Anything else?\n\n"
-            "Jordan: Pricing felt right for what we got, but the per-seat model didn't "
-            "fit how we work — our SDRs run sequences for the whole AE team. We were "
-            "essentially paying 5x for one workflow."
+            "Jordan: Pricing felt right for what we got, but the per-merchant model "
+            "didn't fit how we work — we run one agent across hundreds of merchants. "
+            "We were essentially paying 5x for one conformance pipeline."
         ),
     },
 ]
@@ -203,8 +208,8 @@ async def run_customer_voice() -> list[dict]:
             "icp_segment": tx["icp"],
             "source_kind": tx["source_kind"],
             "source_id": f"e2e_{i}",
-            "icp_segments": ["seg_founder_b2b", "seg_revops_director",
-                             "seg_ae_growth", "seg_pmm_growth"],
+            "icp_segments": ["seg_merchant_dtc", "seg_ecom_leader",
+                             "seg_payments_network", "seg_agent_platform"],
         }
         message = (
             f"Ingest the following {tx['source_kind']} text into customer_voice. "
@@ -238,14 +243,16 @@ async def run_customer_voice() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 POSITIONING_BRIEFS = [
-    ("seg_founder_b2b",
-     "Founders running a 10-50 person B2B SaaS care about expansion revenue, "
-     "not vanity metrics. Propose 2-3 claims grounded in our customer_voice "
-     "rows for this ICP."),
-    ("seg_revops_director",
-     "RevOps directors want one source of truth for the renewal forecast. "
-     "Propose 2-3 claims targeting that pain — anchor in voice quotes "
-     "about attribution reconciliation."),
+    ("seg_merchant_dtc",
+     "DTC merchants care about not losing AI-shopper revenue when their store "
+     "fails silently in agent checkout, not vanity traffic metrics. Propose "
+     "2-3 claims grounded in our customer_voice rows for this ICP — anchor in "
+     "the agent-readiness score and simulating buyer agents pre-production."),
+    ("seg_ecom_leader",
+     "E-commerce leaders want one trusted agent-readiness score across every "
+     "surface (ChatGPT Shop, Copilot Checkout, Gemini Shopping). Propose 2-3 "
+     "claims targeting that pain — anchor in voice quotes about catching "
+     "protocol conformance gaps before launch."),
 ]
 
 
@@ -342,9 +349,9 @@ async def run_positioning() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 DRAFTING_BRIEFS = [
-    ("seg_founder_b2b", "substack", "What B2B founders are getting wrong about agentic GTM"),
-    ("seg_revops_director", "linkedin", "Renewal forecast reconciliation in the AI era"),
-    ("seg_ae_growth", "blog", "Why personalization-at-scale is finally working"),
+    ("seg_merchant_dtc", "substack", "What DTC brands are getting wrong about agent-readiness"),
+    ("seg_ecom_leader", "linkedin", "Why your store fails silently in ChatGPT checkout"),
+    ("seg_payments_network", "blog", "Why protocol conformance is finally testable pre-production"),
 ]
 
 
@@ -399,13 +406,13 @@ async def run_drafting() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 LIFECYCLE_BRIEFS = [
-    ("seg_founder_b2b",
-     "Draft a 4-step nurture sequence for founders who downloaded the "
-     "'expansion revenue' guide but haven't booked a demo. Theme: turning "
-     "passive interest into a 15-min conversation."),
-    ("seg_revops_director",
-     "Draft a 3-step re-engagement sequence for RevOps directors whose "
-     "trials expired without converting. Theme: the integration friction "
+    ("seg_merchant_dtc",
+     "Draft a 4-step nurture sequence for DTC merchants who ran a free "
+     "agent-readiness scan but haven't booked a demo. Theme: turning a low "
+     "readiness score into a 15-min conversation about fixing agent checkout."),
+    ("seg_ecom_leader",
+     "Draft a 3-step re-engagement sequence for e-commerce leaders whose "
+     "trials expired without converting. Theme: the protocol conformance gaps "
      "they raised in their churn interviews."),
 ]
 
@@ -451,13 +458,13 @@ async def run_lifecycle_email() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 PAID_BRIEFS = [
-    ("seg_revops_director", "google_ads",
-     "Propose 3 paused Google Ads RSA variants targeting RevOps directors. "
-     "Test angle: integration friction. No live BQ in this run — focus on "
-     "variant proposals."),
-    ("seg_founder_b2b", "linkedin_ads",
-     "Propose 3 paused LinkedIn Ads variants targeting B2B founders. "
-     "Test angle: expansion revenue."),
+    ("seg_ecom_leader", "google_ads",
+     "Propose 3 paused Google Ads RSA variants targeting e-commerce leaders. "
+     "Test angle: protocol conformance gaps. No live BQ in this run — focus "
+     "on variant proposals."),
+    ("seg_merchant_dtc", "linkedin_ads",
+     "Propose 3 paused LinkedIn Ads variants targeting DTC merchants. "
+     "Test angle: lost AI-shopper revenue from agent checkout failures."),
 ]
 
 

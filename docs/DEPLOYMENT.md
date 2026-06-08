@@ -89,6 +89,22 @@ PROJECT_ID=$PROJECT_ID ./scripts/create_mongo_users.sh
 python mongo/seed.py            # collections + Atlas vector index
 ```
 
+> **Seed safety — reseeding an existing cluster.** `python mongo/seed.py` only
+> creates collections + indexes; it never deletes data. The *destructive*
+> reseeds **wipe collections before re-inserting**, so each carries a prod-guard
+> that refuses a non-local (Atlas) target unless you explicitly name it. Local
+> Docker/`localhost` targets pass straight through. This is deliberate — it
+> prevents a stray seed from wiping the live Atlas cluster.
+>
+> | Reseed path | What it wipes | How to authorize a deliberate Atlas reseed |
+> |---|---|---|
+> | `python -m mongo.cli load-all` · `scripts/local_seed.py` | skills + reference collections (load-all); **all** collections (local_seed) | set `MONGO_SEED_CONFIRM` to a substring of `MONGO_URI_DIRECT` (e.g. the cluster name `hindsight-guild`), or to `PROJECT_ID` on the Secret-Manager path |
+> | `POST /api/admin/seed` (web-api) | skills + reference collections | set env **`MONGO_SEED_CONFIRM=$PROJECT_ID`** on the `web-api` service, **in addition to** `ADMIN_SEED_TOKEN`. Without it the endpoint returns **409**. |
+> | `python -m demo.seed_demo` | **everything in Mongo + TRUNCATEs BigQuery** (synthetic demo data only) | set `SEED_DEMO_CONFIRM=$PROJECT_ID`. Only ever run against a throwaway/demo project. |
+>
+> Transactional collections (`actions`, `outcomes`, `approvals`, `signals`) are
+> left untouched by `load-all` / `admin/seed`; only `seed_demo` clears them.
+
 Then in the Atlas UI (or CLI): **Network Access → allow Cloud Run egress.**
 For an M0 cluster the simplest is `0.0.0.0/0` (TLS + auth still required);
 tighten to VPC peering / PrivateLink later for production.
@@ -198,7 +214,12 @@ The run summary prints the UI and `web-api` URLs.
 - **Apps Script** (`apps_script/Code.gs`): set `HANDLER_URL` to the
   `edit-capture-handler` URL (`gcloud run services describe edit-capture-handler --region=$REGION --format='value(status.url)'`).
 - **Slack**: put your real incoming-webhook URL in `slack_webhook_url`.
-- **Seed demo data** (optional): `python -m demo.seed_demo`.
+- **Seed demo data** (optional): `SEED_DEMO_CONFIRM=$PROJECT_ID python -m demo.seed_demo`
+  — **wipes Mongo + BigQuery** and reseeds synthetic data; the guard refuses
+  without the confirm var. See **§5 seed safety**.
+- **Enable in-app reseed** (optional): to use `POST /api/admin/seed`, set
+  `MONGO_SEED_CONFIRM=$PROJECT_ID` on the `web-api` service (plus
+  `ADMIN_SEED_TOKEN`); otherwise it returns **409**. See **§5 seed safety**.
 - **Open the site**: `https://<project>.web.app`.
 - **Custom domain** (when ready): Firebase console → Hosting → *Add custom
   domain* → add the A / TXT records it shows at your DNS registrar. No code

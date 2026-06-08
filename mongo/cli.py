@@ -18,6 +18,7 @@ just wires their cmd_* functions into argparse.
 from __future__ import annotations
 
 import argparse
+import sys
 
 # This CLI is operator-only; mongo_tools defaults to mongo_uri_writer
 # (see shared/mongo_tools.py:_DEFAULT_SECRET). Override per-call with
@@ -33,7 +34,7 @@ from mongo.cli_query import (
     cmd_running_experiments,
     cmd_self_critique_proposals,
 )
-from mongo.cli_seed import cmd_ingest_quotes, cmd_load_all
+from mongo.cli_seed import SeedGuardError, cmd_ingest_quotes, cmd_load_all
 
 
 def main():
@@ -76,7 +77,10 @@ def main():
     iq.set_defaults(fn=cmd_ingest_quotes)
 
     args = p.parse_args()
-    args.fn(args)
+    try:
+        args.fn(args)
+    except SeedGuardError as e:
+        sys.exit(f"\n{e}\n")
 
 
 if __name__ == "__main__":

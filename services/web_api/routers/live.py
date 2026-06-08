@@ -74,8 +74,8 @@ def live_ops():
         {"name": "self-critique",    "schedule": "Mon 09:00 UTC",     "category": "propose revisions"},
         {"name": "self-critique-runner", "schedule": "nightly 02:00 UTC", "category": "miner proposals"},
         {"name": "promotion-gate",   "schedule": "Sun 23:00 UTC",     "category": "raise promotions"},
-        {"name": "signal-watcher",   "schedule": "every 30m",         "category": "signal ingestion"},
-        {"name": "signal-router",    "schedule": "every 5m",          "category": "signal routing"},
+        {"name": "signal-watcher",   "schedule": "weekly Sun 00:00 UTC", "category": "signal ingestion"},
+        {"name": "signal-router",    "schedule": "weekly Sun 00:30 UTC", "category": "signal routing"},
     ]
 
     return {
@@ -154,8 +154,8 @@ def _live_ops_from_mongo() -> dict:
         {"name": "snapshot-mongo", "schedule": "hourly", "category": "ops"},
         {"name": "derive-track-records", "schedule": "nightly 04:00 UTC", "category": "analytics"},
         {"name": "substack-publish-sweep", "schedule": "every 15m", "category": "publish"},
-        {"name": "signal-watcher", "schedule": "every 30m", "category": "signal ingestion"},
-        {"name": "signal-router", "schedule": "every 5m", "category": "signal routing"},
+        {"name": "signal-watcher", "schedule": "weekly Sun 00:00 UTC", "category": "signal ingestion"},
+        {"name": "signal-router", "schedule": "weekly Sun 00:30 UTC", "category": "signal routing"},
     ]
 
     return {

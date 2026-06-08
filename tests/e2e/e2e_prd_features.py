@@ -113,22 +113,22 @@ def run_aeo_section(base: str) -> Section:
     # on a fixture draft.
     try:
         from scripts.aeo import content_quality, parse_draft, passage_blocks, schema_generate
-        sample = ("# Stop renewal slip at the CSM handoff\n\n"
+        sample = ("# Stop revenue loss when your store fails silently in agent checkout\n\n"
                   "## What changes\n\n"
                   "Per Ahrefs December 2025, brand mentions correlate 3x more "
-                  "strongly with AI citation than backlinks. The CSM handoff "
-                  "is where most renewal data drops. " * 6)
+                  "strongly with AI citation than backlinks. Agent checkout "
+                  "is where most AI-shopper revenue drops. " * 6)
         cq = content_quality.analyse(sample)
         pd = parse_draft.extract_structure(sample)
         pb = passage_blocks.detect_blocks(sample)
         sg = schema_generate.emit_article_jsonld({
-            "headline": "Stop renewal slip at the CSM handoff",
+            "headline": "Stop revenue loss when your store fails silently in agent checkout",
             "author": {"name": "Test Author"},
             "publisher": {"name": "Test Co"},
         })
         if not isinstance(cq, dict) or "overall_quality" not in cq:
             s.fail("scripts_smoke", f"content_quality shape: {cq}")
-        elif pd["h1"] != "Stop renewal slip at the CSM handoff":
+        elif pd["h1"] != "Stop revenue loss when your store fails silently in agent checkout":
             s.fail("scripts_smoke", f"parse_draft H1: {pd['h1']!r}")
         elif "self_contained_blocks_signal" not in pb:
             s.fail("scripts_smoke", f"passage_blocks shape: {pb}")
@@ -233,8 +233,8 @@ def run_signals_section(base: str) -> Section:
         r = requests.get(f"{base}/api/signals/sources", timeout=10)
         sources = r.json()
         names = {src["name"] for src in sources}
-        for seed in ("hn-revops-handoff", "reddit-saas-marketing",
-                     "rss-google-ai-blog"):
+        for seed in ("hn-agentic-commerce", "reddit-ecommerce",
+                     "rss-google-news-agentic"):
             if seed not in names:
                 s.fail("seeded_sources", f"seed {seed!r} missing")
                 break
@@ -265,7 +265,7 @@ def run_signals_section(base: str) -> Section:
         url = f"https://example.com/{E2E_RUN_TAG}/manual-signal"
         r = requests.post(
             f"{base}/api/signals/manual",
-            json={"url": url, "icp_segment": "seg_revops_director"},
+            json={"url": url, "icp_segment": "seg_ecom_leader"},
             timeout=10,
         )
         if not r.ok:
@@ -297,7 +297,7 @@ def run_signals_section(base: str) -> Section:
         url = f"https://example.com/{E2E_RUN_TAG}/to-suppress"
         ins = requests.post(
             f"{base}/api/signals/manual",
-            json={"url": url, "icp_segment": "seg_founder_b2b"},
+            json={"url": url, "icp_segment": "seg_merchant_dtc"},
             timeout=10,
         ).json()
         sid = ins.get("signal_id")
@@ -376,6 +376,121 @@ def run_signals_section(base: str) -> Section:
     except Exception as e:
         s.fail("dedupe", f"dedupe flow failed: {e}")
 
+    # 7. Watcher scoring + customer_voice mirror. Deterministic: stub the
+    #    network edge (the HN adapter) and drive the REAL signal_watcher
+    #    against the shared Mongo, so we exercise scoring (base x boost, capped
+    #    at 1.0), the unique-index insert, and the score-floor-gated
+    #    customer_voice mirror — without depending on a live HN poll.
+    try:
+        from unittest.mock import patch
+
+        from agents import signal_watcher
+        src_name = f"hn-{E2E_RUN_TAG}"
+        url = f"https://news.ycombinator.com/item?id={E2E_RUN_TAG}"
+        db[Coll.SIGNAL_SOURCES].insert_one({
+            "name": src_name, "source": "hn", "enabled": True,
+            "icp_segment": "seg_merchant_dtc", "score_floor": 0.5,
+            "cursor": None, "config": {"query": "x"},
+        })
+        _register_cleanup(
+            lambda n=src_name: db[Coll.SIGNAL_SOURCES].delete_many({"name": n}))
+        _register_cleanup(
+            lambda u=url: db[Coll.SIGNALS].delete_many({"evidence_url": u}))
+        _register_cleanup(
+            lambda u=url: db[Coll.CUSTOMER_VOICE].delete_many({"source": u}))
+        event = {
+            "source": "hn", "evidence_url": url,
+            "evidence_excerpt": "agentic commerce: instant checkout on shopify",
+            "created_at_i": 1, "raw": {"num_comments": 20, "points": 30},
+        }
+        with patch("scripts.signals.hn_adapter.poll", return_value=[event]), \
+             patch("scripts.signals.hn_adapter.base_score", return_value=1.0):
+            signal_watcher.run_once(db=db)
+        sig = db[Coll.SIGNALS].find_one({"evidence_url": url})
+        if not sig:
+            s.fail("watcher_scoring", "watcher wrote no signal row")
+        elif sig.get("score") != 1.0:
+            s.fail("watcher_scoring",
+                   f"expected base x boost capped to 1.0, got {sig.get('score')}")
+        else:
+            voice = db[Coll.CUSTOMER_VOICE].find_one({"signal_id": sig["_id"]})
+            if not voice or voice.get("source_kind") != "community_signal":
+                s.fail("watcher_scoring",
+                       "above-floor signal not mirrored into customer_voice")
+            else:
+                s.pass_("watcher_scoring",
+                        "scored (base x ICP boost -> capped 1.0) + mirrored to "
+                        "customer_voice as community_signal")
+    except Exception as e:
+        s.fail("watcher_scoring", f"watcher flow failed: {e}")
+
+    # 8. triggered_telemetry_id back-ref. Enqueue a signal-triggered draft
+    #    through the REAL /api/draft path and assert the pipeline writes the
+    #    resulting telemetry_id back onto the signal row (drafting.py's
+    #    _record_signal_backref) — the link the queue chip + /signals deep-link
+    #    rely on. Skips (not fails) when no draft backend is configured here.
+    try:
+        url = f"https://example.com/{E2E_RUN_TAG}/backref"
+        ins = requests.post(
+            f"{base}/api/signals/manual",
+            json={"url": url, "icp_segment": "seg_ecom_leader"},
+            timeout=10,
+        ).json()
+        sid = ins.get("signal_id")
+        _register_cleanup(
+            lambda u=url: db[Coll.SIGNALS].delete_many({"evidence_url": u}))
+        if not sid:
+            s.fail("backref", f"setup signal insert failed: {ins}")
+        else:
+            r = requests.post(f"{base}/api/draft", json={
+                "channel": "linkedin",
+                "icp_segment": "seg_ecom_leader",
+                "topic_hint": f"{E2E_RUN_TAG} signal backref",
+                "triggered_by_signal_id": sid,
+            }, timeout=15)
+            if not r.ok:
+                s.fail("backref", f"/api/draft HTTP {r.status_code}: {r.text[:120]}")
+            else:
+                job_id = r.json().get("job_id")
+                status, result = None, None
+                deadline = time.time() + 120
+                while time.time() < deadline:
+                    jr = requests.get(
+                        f"{base}/api/draft/{job_id}", timeout=10).json()
+                    status = jr.get("status")
+                    if status in ("done", "failed"):
+                        result = jr.get("result")
+                        break
+                    time.sleep(2)
+                if status == "failed":
+                    s.skip("backref",
+                           "draft job failed (no A2A pipeline / "
+                           "DRAFTING_FALLBACK=synthetic here) — back-ref not "
+                           "exercisable in this env")
+                elif status != "done":
+                    s.skip("backref", "draft job did not finish within 120s")
+                else:
+                    tid = (result or {}).get("telemetry_id")
+                    if tid:
+                        _register_cleanup(
+                            lambda t=tid:
+                                db["actions"].delete_many({"telemetry_id": t}))
+                    sig = db[Coll.SIGNALS].find_one({"evidence_url": url})
+                    back = sig.get("triggered_telemetry_id") if sig else None
+                    if not back:
+                        s.fail("backref",
+                               "draft done but signal.triggered_telemetry_id "
+                               "not set")
+                    elif tid and back != tid:
+                        s.fail("backref",
+                               f"back-ref {back!r} != telemetry_id {tid!r}")
+                    else:
+                        s.pass_("backref",
+                                f"signal back-ref set to "
+                                f"telemetry_id={str(back)[:12]}...")
+    except Exception as e:
+        s.fail("backref", f"back-ref flow failed: {e}")
+
     return s
 
 
@@ -401,7 +516,7 @@ def run_self_critique_section(base: str) -> Section:
     try:
         db[Coll.PAID_VARIANTS].insert_one({
             "_id": variant_id, "name": variant_id, "status": "running",
-            "platform": "google_ads", "icp_segment": "seg_founder_b2b",
+            "platform": "google_ads", "icp_segment": "seg_merchant_dtc",
             "experiment_id": f"{E2E_RUN_TAG}_exp",
             "external_id": f"ad_{E2E_RUN_TAG}",
             "spend_24h": 250.0, "conversions_24h": 0,

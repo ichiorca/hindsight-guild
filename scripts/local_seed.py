@@ -59,7 +59,7 @@ NOW = datetime.now(UTC)
 # would produce after a real evaluation pass.
 # ---------------------------------------------------------------------------
 
-_HOUSE_STYLE_V2_BODY = """---
+_HOUSE_STYLE_CANDIDATE_BODY = """---
 name: house-style
 description: Brand voice rules — load this before drafting or reviewing any customer-facing content. Use when the user mentions 'tone', 'voice', 'how we sound', 'rewrite this on-brand', or asks for an edit on something we shipped.
 metadata:
@@ -119,26 +119,26 @@ def _seed_house_style_promotion_request() -> dict:
     if not hs_doc:
         raise RuntimeError("house-style not in build_agent_skill_docs()")
 
-    current_body = hs_doc["versions"]["v1"]["body_md"]
-    candidate_body = _HOUSE_STYLE_V2_BODY
+    current_body = hs_doc["versions"]["v0"]["body_md"]
+    candidate_body = _HOUSE_STYLE_CANDIDATE_BODY
 
     diff = "\n".join(difflib.unified_diff(
         current_body.splitlines(),
         candidate_body.splitlines(),
-        fromfile="house-style/SKILL.md (v1)",
-        tofile="house-style/SKILL.md (v2)",
+        fromfile="house-style/SKILL.md (v0)",
+        tofile="house-style/SKILL.md (v1)",
         n=3, lineterm="",
     ))
 
-    # Add v2 to the versions map so approval has a body to materialize.
-    hs_doc["versions"]["v2"] = {
+    # Add v1 to the versions map so approval has a body to materialize.
+    hs_doc["versions"]["v1"] = {
         "body_md": candidate_body,
         "proposed_at": NOW,
         "source": "self_critique",
     }
     # And the promotion_request shape promotion_gate would produce.
     hs_doc["self_critique_proposal"] = {
-        "candidate_id": "v2",
+        "candidate_id": "v1",
         "issue": (
             "Recent drafts loading house-style on linkedin + email over-use "
             "absolute language ('guaranteed', 'eliminates') even though the "
@@ -153,8 +153,8 @@ def _seed_house_style_promotion_request() -> dict:
         "status": "gated_through",  # passed the gate, now in promotion
     }
     hs_doc["promotion_request"] = {
-        "candidate": "v2",
-        "incumbent": "v1",
+        "candidate": "v1",
+        "incumbent": "v0",
         "kind": "agent_skill",
         "issue": hs_doc["self_critique_proposal"]["issue"],
         "proposed_diff": diff,
@@ -208,6 +208,13 @@ def main():
           f"db={db_name} [{mode}]")
 
     db = mongo_tools.db()
+
+    # Prod-guard: this script wipes EVERY collection (incl. transactional), so
+    # refuse against a non-local Mongo unless explicitly confirmed. Shared
+    # choke point with the CLI / admin seed (see mongo/cli_seed.py). Local
+    # Docker/localhost targets — the normal case here — pass straight through.
+    from mongo.cli_seed import guard_destructive_seed
+    guard_destructive_seed("local_seed wipe")
 
     # Wipe everything we're about to seed (idempotent re-runs). This wipes
     # in clean mode too — re-running this script always produces an
@@ -285,7 +292,7 @@ def main():
             f"  messaging_library: {len(MESSAGING_CLAIMS)}\n"
             f"  experiments:       {len(EXPERIMENTS)}\n"
             f"\n  Pre-staged promotion_request on house-style. Weekly Review "
-            f"will render the AgentSkillPromotionCard with the v1->v2 diff."
+            f"will render the AgentSkillPromotionCard with the v0->v1 diff."
         )
     else:
         print(
@@ -305,4 +312,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    from mongo.cli_seed import SeedGuardError
+    try:
+        main()
+    except SeedGuardError as e:
+        raise SystemExit(f"\n{e}\n") from None

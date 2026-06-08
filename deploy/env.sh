@@ -87,6 +87,20 @@ declare -A SCHEDULES=(
   [substack-publish-sweep]="*/15 * * * *" # every 15 min (stuck-publish retry)
 )
 
+# ---------------------------------------------------------------------------
+# HTTP endpoint schedulers (Cloud Scheduler -> web-api endpoint, NOT a Cloud
+# Run Job). PRD-02 signal ingestion + routing run IN-PROCESS inside web-api
+# (POST /api/signals/poll-now and /route-now), so we poke those endpoints on a
+# cron instead of standing up dedicated jobs. Key = scheduler trigger name;
+# value = "<cron UTC>|<endpoint path>". The router is staggered 30 min after
+# the watcher so it routes the signals that same Sunday poll just wrote
+# (otherwise a same-minute router run would lag a full week).
+# ---------------------------------------------------------------------------
+declare -A SIGNAL_ENDPOINT_SCHEDULES=(
+  [signal-watcher]="0 0 * * SUN|/api/signals/poll-now"   # Sun 00:00 UTC — poll HN/Reddit/RSS
+  [signal-router]="30 0 * * SUN|/api/signals/route-now"  # Sun 00:30 UTC — route pending signals -> drafts
+)
+
 # Secrets that sa-agents needs read access to. setup.sh creates these as
 # "PENDING" stubs; deploy/06-bind-iam.sh grants secretAccessor on each.
 SECRETS_FOR_AGENTS=(
@@ -102,6 +116,10 @@ SECRETS_FOR_AGENTS=(
   google_ads_refresh_token
   google_ads_login_customer_id
   linkedin_access_token
+  reddit_client_id
+  reddit_client_secret
+  reddit_username
+  reddit_password
   substack_api_key
   substack_publication_host
   substack_publication_id

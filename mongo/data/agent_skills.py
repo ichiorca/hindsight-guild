@@ -44,10 +44,7 @@ Disk ↔ Mongo contract for migrated Skills:
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
-
-NOW = datetime(2026, 5, 26, 9, 0, tzinfo=UTC)
 
 # The five Skills under the self-evolution loop. To migrate another Skill,
 # (a) confirm it satisfies the selection criteria above, (b) add it here,
@@ -90,15 +87,15 @@ def build_agent_skill_docs() -> list[dict]:
         docs.append({
             "_id": skill_id,
             "skill_kind": "agent_skill",
-            # current_version is a logical pointer; the actual markdown
-            # body lives under versions[current_version].
-            "current_version": "v1",
+            # current_version is a logical pointer; the actual markdown body
+            # lives under versions[current_version]. v0 = the genesis import,
+            # no promotions yet — the self-evolution loop advances this later.
+            "current_version": "v0",
             "candidates": [],
-            "history": ["v1"],
+            "history": ["v0"],
             "versions": {
-                "v1": {
+                "v0": {
                     "body_md": body,
-                    "promoted_at": NOW,
                     "source": "import:marketingskills@MIT",
                 },
             },
@@ -107,7 +104,5 @@ def build_agent_skill_docs() -> list[dict]:
                 "icp_segments": [],   # empty = applies to all ICPs
                 "channels": list(_CHANNELS_CROSS),
             },
-            "promoted_at": NOW,
-            "promoted_from_experiment": None,
         })
     return docs

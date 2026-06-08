@@ -67,7 +67,7 @@ export default function SignalsPage() {
               <Empty
                 icon={Radar}
                 title="No sources configured."
-                description="Run the schema bootstrap to seed three sample sources (hn-revops-handoff, reddit-saas-marketing, rss-google-ai-blog)."
+                description="Run the schema bootstrap to seed agentic-commerce sources (hn-agentic-commerce, reddit-*-rss, rss-google-news-agentic, …)."
               />
             )}
             {!sources.isLoading && (sources.data ?? []).length > 0 && (
@@ -163,7 +163,7 @@ export default function SignalsPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="seg_revops_director"
+                  placeholder="seg_merchant_dtc"
                   value={manualIcp}
                   onChange={(e) => setManualIcp(e.target.value)}
                   className="w-full px-3 py-2 text-sm border rounded-md bg-card"

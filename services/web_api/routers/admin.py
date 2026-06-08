@@ -37,6 +37,17 @@ def admin_seed(x_admin_token: str | None = Header(default=None)) -> dict:
     the ``X-Admin-Token`` header.
     """
     _require_admin(x_admin_token)
+
+    # Prod-guard: even with a valid admin token, refuse to wipe+reseed a
+    # non-local Mongo unless the service env explicitly names the target via
+    # MONGO_SEED_CONFIRM (= PROJECT_ID on the Secret Manager path). Single
+    # choke point shared with the CLI / local_seed; see mongo/cli_seed.py.
+    from mongo.cli_seed import SeedGuardError, guard_destructive_seed
+    try:
+        guard_destructive_seed("admin seed")
+    except SeedGuardError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
     out: dict = {}
 
     # Schema bootstrap: indexes + signal_sources sample rows. apply() connects

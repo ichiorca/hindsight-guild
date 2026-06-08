@@ -67,9 +67,12 @@ class Channel:
     LINKEDIN_ADS = "linkedin_ads"
 
 
-# ICP segments — must match mongo/data/customer_voice.py + messaging_library.py
+# ICP segments (agentic commerce) — must match mongo/data/customer_voice.py +
+# messaging_library.py and agents/signal_watcher.py:_ICP_KEYWORDS.
+# Merchants are the primary ICP (signalCommerce sells the agent-readiness /
+# protocol-conformance testing & trust layer).
 class Icp:
-    FOUNDER_B2B = "seg_founder_b2b"
-    REVOPS_DIRECTOR = "seg_revops_director"
-    AE_GROWTH = "seg_ae_growth"
-    PMM_GROWTH = "seg_pmm_growth"
+    MERCHANT_DTC = "seg_merchant_dtc"          # PRIMARY — DTC / e-commerce merchants
+    ECOM_LEADER = "seg_ecom_leader"            # e-commerce / digital leaders (enterprise)
+    PAYMENTS_NETWORK = "seg_payments_network"  # payment providers / PSPs / card networks
+    AGENT_PLATFORM = "seg_agent_platform"      # agentic buyer platforms / agent builders

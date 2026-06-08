@@ -42,10 +42,11 @@ export function scoreColor(s: number | undefined | null): string {
 // Human labels for the ICP segment ids that the seed + pipeline use.
 // Keep in sync with mongo/data/customer_voice.py + scripts/local_seed.py.
 export const ICP_LABELS: Record<string, string> = {
-  seg_founder_b2b: "B2B founder",
-  seg_revops_director: "RevOps director",
-  seg_ae_growth: "AE / growth",
-  seg_pmm_growth: "PMM / growth marketing",
+  // Agentic-commerce ICPs — merchants are the primary buyer.
+  seg_merchant_dtc: "Merchant / DTC brand",
+  seg_ecom_leader: "E-commerce leader",
+  seg_payments_network: "Payments / network",
+  seg_agent_platform: "Agent platform",
 };
 
 export function icpLabel(slug: string | null | undefined): string {

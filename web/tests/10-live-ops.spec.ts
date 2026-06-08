@@ -31,9 +31,9 @@ test("live ticker: visible when a draft job is in flight", async ({ page, reques
   // Fire a quick synthetic job.
   await request.post("/api/draft", {
     data: {
-      icp_segment: "seg_founder_b2b",
+      icp_segment: "seg_merchant_dtc",
       channel: "linkedin",
-      topic_hint: "ticker e2e test",
+      topic_hint: "agent-readiness ticker e2e test",
       agent_id: "positioning_agent",  // synthetic, fast
     },
   });

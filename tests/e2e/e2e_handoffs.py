@@ -236,28 +236,28 @@ def validate_self_critique(r: dict, agent_id: str) -> tuple[str, str]:
 
 HANDOFFS: list[tuple[str, str, str, Callable]] = [
     # Full pipeline (no agent_id) — the default route.
-    ("pipeline",              "linkedin",      "renewal forecast reconciliation",
+    ("pipeline",              "linkedin",      "protocol conformance gaps in agent checkout",
      validate_pipeline),
 
     # Drafting domain — Content only.
-    ("content_agent",         "linkedin",      "the handoff friction we keep hearing about",
+    ("content_agent",         "linkedin",      "the agent checkout failures we keep hearing about",
      validate_pipeline),
 
     # Lifecycle email — produces a sequence.
-    ("lifecycle_email_agent", "lifecycle_email", "expansion revenue nurture for founders",
+    ("lifecycle_email_agent", "lifecycle_email", "agent-readiness nurture for DTC merchants",
      validate_lifecycle),
 
     # Paid media — variants + stop-loss.
-    ("paid_media_agent",      "google_ads",    "integration friction for RevOps directors",
+    ("paid_media_agent",      "google_ads",    "protocol conformance gaps for e-commerce leaders",
      validate_paid_media),
 
     # Positioning — proposes claims.
-    ("positioning_agent",     "linkedin",      "auto-generated CSM handoff brief",
+    ("positioning_agent",     "linkedin",      "auto-generated agent-readiness diagnostic brief",
      validate_positioning),
 
     # Customer voice — ingests raw text.
     ("customer_voice_agent",  "linkedin",
-     "Sales call: customer said the integration with Salesforce takes weeks…",
+     "Sales call: customer said their store fails silently in ChatGPT checkout…",
      validate_customer_voice),
 
     # Ops/QA sweep.
@@ -265,7 +265,7 @@ HANDOFFS: list[tuple[str, str, str, Callable]] = [
      validate_ops_qa),
 
     # CMO weekly memo.
-    ("cmo_planner",           "linkedin",      "expansion revenue",
+    ("cmo_planner",           "linkedin",      "lost AI-shopper revenue",
      validate_cmo_memo),
 
     # Research only.
@@ -308,7 +308,7 @@ def fire_handoff(base: str, agent_id: str, channel: str, topic_hint: str,
     """Submit one handoff job, poll until done, validate the result shape."""
     started = time.monotonic()
     payload = {
-        "icp_segment": "seg_founder_b2b",
+        "icp_segment": "seg_merchant_dtc",
         "channel": channel,
         "topic_hint": topic_hint,
     }

@@ -343,7 +343,7 @@ def make_mongodb_tools(mode: Literal["read", "write"], *,
             query_text: The query in plain English.
             top_k: How many results to return (default 5, max 20).
             filter_expr: Optional pre-filter (e.g.
-                ``{"icp_segment": "seg_founder_b2b"}``). Filtered fields must
+                ``{"icp_segment": "seg_merchant_dtc"}``). Filtered fields must
                 be declared as ``filter`` fields in the autoEmbed index.
         """
         k = max(1, min(int(top_k or 5), 20))

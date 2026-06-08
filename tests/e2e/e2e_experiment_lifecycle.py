@@ -45,7 +45,7 @@ What this proves end-to-end:
 
 What this test DOES NOT cover (intentional, out of scope for LOCAL_DEV):
 
-  - Real GA4 / HubSpot / Google Ads outcome attribution (would need a
+  - Real GA4 / agent-checkout / Google Ads outcome attribution (would need a
     deployed Cloud Run job + live ad spend).
   - Real Vertex AI Eval Service rubric grading (the local pipeline
     runs against the Gemini API direct endpoint; eval scores degrade
@@ -276,7 +276,7 @@ async def phase_2_author_experiment() -> dict:
         "  title: Does urgency framing lift LinkedIn engagement?\n"
         "  hypothesis: Urgency-tinted hooks lift 72h engagement by >= 3pp vs neutral baseline\n"
         "  channel: linkedin\n"
-        "  icp_segment: seg_founder_b2b\n"
+        "  icp_segment: seg_merchant_dtc\n"
         f"  success_metric: {_OUTCOME_METRIC}\n"
         f"  mde: {_OUTCOME_MDE}\n"
         f"  min_n_per_arm: {_MIN_N_PER_ARM}\n"
@@ -319,7 +319,7 @@ async def phase_2_author_experiment() -> dict:
             "hypothesis": ("Urgency-tinted hooks lift 72h engagement by "
                            ">= 3pp vs neutral baseline"),
             "channel": "linkedin",
-            "icp_segment": "seg_founder_b2b",
+            "icp_segment": "seg_merchant_dtc",
             "success_metric": _OUTCOME_METRIC,
             "mde": _OUTCOME_MDE,
             "min_n_per_arm": _MIN_N_PER_ARM,
@@ -379,9 +379,9 @@ async def phase_3_run_pipeline(exp: dict) -> list[str]:
             # Topic varies per variant so the content differs and the
             # downstream Review's rubric scores have something to grade.
             topic = (
-                "Why the next two weeks decide your Q3 pipeline"
+                "Why the next two weeks decide your agent checkout revenue"
                 if variant_id.startswith("B")
-                else "Building a sustainable Q3 pipeline"
+                else "Building a durable agent-readiness program"
             )
             seed_state = {
                 "telemetry_id": telemetry_id,
@@ -397,7 +397,7 @@ async def phase_3_run_pipeline(exp: dict) -> list[str]:
                 "topic_hint": topic,
             }
             message = (
-                f"Draft a linkedin post targeting seg_founder_b2b "
+                f"Draft a linkedin post targeting seg_merchant_dtc "
                 f"experiment_id:{exp['_id']} variant:{variant_id}.\n"
                 f"Topic hint: {topic}.\n"
                 "Keep it under 220 words. Hook → 2 paragraphs → soft CTA."
@@ -553,7 +553,7 @@ def phase_6_drift_detection() -> None:
                 "skill_version": "v1.0.0",
                 "action_type": "draft",
                 "channel": _DRIFT_CHANNEL,
-                "icp_segment": "seg_founder_b2b",
+                "icp_segment": "seg_merchant_dtc",
                 "eval_scores": {_DRIFT_RUBRIC: score, "claim_support": 0.80},
                 "ts": ts,
             })

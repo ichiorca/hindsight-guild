@@ -285,37 +285,57 @@ def apply() -> None:
     # + the ops drilldown.
     db.self_critique_runs.create_index([("started_at", DESCENDING)])
 
-    # Seed 3 sample signal_sources (HN / Reddit / RSS) so the watcher has
-    # something to poll on first run. Disabled by default — the founder
-    # enables individually after confirming the query is right for their
-    # ICP. Same self-seed pattern as paid_thresholds above.
+    # Seed agentic-commerce signal_sources so the watcher has something to
+    # poll. Merchants are the primary ICP. ENABLED out of the box: HN + Reddit
+    # via RSS. The `*-rss` Reddit sources need NO credentials — Reddit's public
+    # JSON is rate-limited/blocked, so we read its Atom `.rss` feeds through the
+    # generic rss adapter instead. The OAuth-based `reddit` sources are kept but
+    # DISABLED: enable one (with REDDIT_USE_OAUTH=1 + the reddit_* secrets) for
+    # richer scoring (upvotes/comments), and disable the matching `*-rss` source
+    # so the same subreddit isn't double-fetched.
     if db.signal_sources.count_documents({}) == 0:
         db.signal_sources.insert_many([
             {
-                "name": "hn-revops-handoff",
+                "name": "hn-agentic-commerce",
                 "source": "hn",
-                "enabled": False,
+                "enabled": True,   # PRIMARY ICP — merchants going agent-ready
                 "config": {
-                    "query": "(renewal OR handoff OR CSM) AND (RevOps OR \"customer success\")",
-                    "min_points": 5,
+                    "query": ('"agentic commerce" OR "agent checkout" OR '
+                              '"instant checkout" OR "ChatGPT shop" OR '
+                              '"agent-ready" OR ACP OR UCP'),
+                    "min_points": 3,
                 },
-                "icp_segment": "seg_revops_director",
+                "icp_segment": "seg_merchant_dtc",
                 "poll_interval_sec": 1800,
                 "last_polled_at": None,
                 "cursor": None,
                 "score_floor": 0.5,
-                "topic_hint_template": "Stop {pain} at the CSM handoff",
+                "topic_hint_template": "Make your store agent-ready: stop {pain}",
                 "default_channel": "blog",
             },
             {
-                "name": "reddit-saas-marketing",
-                "source": "reddit",
-                "enabled": False,
+                "name": "reddit-ecommerce-rss",
+                "source": "rss",   # Reddit via .rss — no credentials needed
+                "enabled": True,   # PRIMARY ICP — merchants
                 "config": {
-                    "subreddit": "SaaS",
-                    "min_upvotes": 10,
+                    "feed_url": "https://www.reddit.com/r/ecommerce/new/.rss",
                 },
-                "icp_segment": "seg_founder_b2b",
+                "icp_segment": "seg_merchant_dtc",
+                "poll_interval_sec": 1800,
+                "last_polled_at": None,
+                "cursor": None,
+                "score_floor": 0.5,
+                "topic_hint_template": None,
+                "default_channel": "blog",   # merchant how-to/discussion -> blog
+            },
+            {
+                "name": "reddit-shopify-rss",
+                "source": "rss",   # Reddit via .rss — no credentials needed
+                "enabled": True,   # PRIMARY ICP — merchants
+                "config": {
+                    "feed_url": "https://www.reddit.com/r/shopify/new/.rss",
+                },
+                "icp_segment": "seg_merchant_dtc",
                 "poll_interval_sec": 1800,
                 "last_polled_at": None,
                 "cursor": None,
@@ -324,13 +344,84 @@ def apply() -> None:
                 "default_channel": "linkedin",
             },
             {
-                "name": "rss-google-ai-blog",
-                "source": "rss",
+                "name": "reddit-agenticcommerce-rss",
+                "source": "rss",   # the on-topic sub, via .rss — no credentials
+                "enabled": True,   # PRIMARY ICP — agentic-commerce discussion
+                "config": {
+                    "feed_url": "https://www.reddit.com/r/agenticcommerce/new/.rss",
+                },
+                "icp_segment": "seg_merchant_dtc",
+                "poll_interval_sec": 1800,
+                "last_polled_at": None,
+                "cursor": None,
+                "score_floor": 0.5,
+                "topic_hint_template": "Make your store agent-ready: stop {pain}",
+                "default_channel": "substack",   # analytical sub -> reflective essay
+            },
+            {
+                "name": "reddit-ecommerce",
+                "source": "reddit",   # OAuth path — needs REDDIT_USE_OAUTH=1
+                "enabled": False,     # flip on once a Reddit app exists; disable reddit-ecommerce-rss
+                "config": {
+                    "subreddit": "ecommerce",
+                    "min_upvotes": 5,
+                },
+                "icp_segment": "seg_merchant_dtc",
+                "poll_interval_sec": 1800,
+                "last_polled_at": None,
+                "cursor": None,
+                "score_floor": 0.5,
+                "topic_hint_template": None,
+                "default_channel": "linkedin",
+            },
+            {
+                "name": "reddit-aiagents",
+                "source": "reddit",   # OAuth path — needs REDDIT_USE_OAUTH=1
                 "enabled": False,
                 "config": {
-                    "feed_url": "https://blog.google/technology/ai/rss/",
+                    "subreddit": "aiagents",
+                    "min_upvotes": 5,
                 },
-                "icp_segment": "seg_founder_b2b",
+                "icp_segment": "seg_agent_platform",
+                "poll_interval_sec": 1800,
+                "last_polled_at": None,
+                "cursor": None,
+                "score_floor": 0.5,
+                "topic_hint_template": None,
+                "default_channel": "blog",
+            },
+            {
+                "name": "hn-agent-payments",
+                "source": "hn",
+                "enabled": False,
+                "config": {
+                    "query": ('"agent payments" OR AP2 OR x402 OR '
+                              '"agentic checkout" OR "Visa Intelligent Commerce" '
+                              'OR "Mastercard Agent Pay"'),
+                    "min_points": 3,
+                },
+                "icp_segment": "seg_payments_network",
+                "poll_interval_sec": 1800,
+                "last_polled_at": None,
+                "cursor": None,
+                "score_floor": 0.5,
+                "topic_hint_template": None,
+                "default_channel": "blog",
+            },
+            {
+                # Google News RSS is QUERY-FILTERED at the source, so every item
+                # is on-topic (unlike a generic retail feed, whose flat 0.5 base
+                # would flood the queue past the score floor). This is the right
+                # shape for a generic RSS source in a niche domain.
+                "name": "rss-google-news-agentic",
+                "source": "rss",
+                "enabled": True,   # topical industry news for e-comm leaders
+                "config": {
+                    "feed_url": ("https://news.google.com/rss/search?q="
+                                 "%22agentic+commerce%22+OR+%22AI+shopping%22+OR+"
+                                 "%22agentic+checkout%22&hl=en-US&gl=US&ceid=US:en"),
+                },
+                "icp_segment": "seg_ecom_leader",
                 "poll_interval_sec": 3600,
                 "last_polled_at": None,
                 "cursor": None,

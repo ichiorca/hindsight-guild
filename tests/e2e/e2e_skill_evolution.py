@@ -200,7 +200,7 @@ def phase_0_bootstrap() -> dict:
             "history": [_INITIAL_VERSION],
             "candidates": [],
             "applies_to": {
-                "icp_segments": ["seg_founder_b2b"],
+                "icp_segments": ["seg_merchant_dtc"],
                 "channels": _TARGET_CHANNELS,
             },
             "versions": {
@@ -269,7 +269,7 @@ def phase_1_synthesize_telemetry() -> dict:
                 "skills_loaded": [_TEST_SKILL_ID],  # the Skill under test
                 "action_type": "draft",
                 "channel": channel,
-                "icp_segment": "seg_founder_b2b",
+                "icp_segment": "seg_merchant_dtc",
                 "eval_scores": {
                     "brand_voice": round(brand_voice, 4),
                     "claim_support": round(rng.uniform(0.78, 0.86), 4),

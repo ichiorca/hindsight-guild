@@ -36,7 +36,7 @@ async function seedVoiceProposal(request: APIRequestContext, tokenRank = 0) {
   for (let i = 0; i < 3; i++) {
     const res = await kickoffDraft(request, {
       channel: "linkedin",
-      icp_segment: "seg_founder_b2b",
+      icp_segment: "seg_merchant_dtc",
       topic_hint: "self-learning loop seed",
     });
     const tid = res.telemetry_id as string;

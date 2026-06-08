@@ -1,92 +1,101 @@
-"""Customer voice quotes — 30 across 3 ICP segments, thematically distributed.
+"""Customer voice quotes — agentic commerce, across 4 ICP segments.
 
-RevOps gets the heaviest coverage because it's the primary demo ICP. Themes
-are chosen so the reject-then-redraft demo moment is reproducible: when the
-Content Agent vector-searches for an ICP, the returned quotes should map to
-topics agents would naturally draft about (integrations, time-to-value,
-handoffs, pricing, self-serve, list quality, process).
+Merchants (DTC) get the heaviest coverage because they're the primary ICP
+(signalCommerce sells the agent-readiness / protocol-conformance testing &
+trust layer). Themes map to topics agents would naturally draft about so the
+Content Agent's vector-search returns on-topic quotes: agent-readiness,
+checkout reliability, discoverability, protocol conformance, observability,
+payment assurance, integration conformance.
 
 Voyage AI embeddings on the `text` field are generated automatically by the
 MongoDB MCP server's auto-embed feature on insert.
 """
 from __future__ import annotations
 
-REVOPS_DIRECTOR: list[tuple[str, str]] = [
-    # integration_critical (3)
-    ("We tried five tools — the Salesforce integration is what made us stay.",
-     "integration_critical"),
-    ("Three days of HubSpot integration on the old vendor. Three minutes here.",
-     "integration_critical"),
-    ("Pipedrive sync was the dealbreaker, not the price.",
-     "integration_critical"),
-    # time_to_value (3)
-    ("Setup took 20 minutes, not 20 days. That's the first time I've said that.",
-     "time_to_value"),
-    ("We were running our first campaign on day two. Day two.",
-     "time_to_value"),
-    ("I budgeted a quarter for onboarding. We finished in a week.",
-     "time_to_value"),
-    # handoff_friction (3)
-    ("The handoff from sales to CS used to take 3 days. Now it's 3 minutes.",
-     "handoff_friction"),
-    ("Deal handoffs were where leads went to die. The new flow keeps them warm.",
-     "handoff_friction"),
-    ("AE-to-AM transitions are the worst part of B2B. This makes them invisible.",
-     "handoff_friction"),
-    # pricing_clarity (3)
-    ("I knew what it would cost before I got on a call. That's rare.",
-     "pricing_clarity"),
-    ("No 'contact sales for enterprise' tier — pricing is on the page.",
-     "pricing_clarity"),
-    ("Annual pricing with monthly billing. Why isn't this standard?",
-     "pricing_clarity"),
+# PRIMARY ICP — DTC / e-commerce merchants going "agent-ready".
+MERCHANT_DTC: list[tuple[str, str]] = [
+    # agent_readiness (3)
+    ("We thought we were ChatGPT-ready until a test agent failed at checkout.",
+     "agent_readiness"),
+    ("Going agent-ready took one sprint once we could see what the agent saw.",
+     "agent_readiness"),
+    ("Our catalog looked fine to humans and broke for every shopping agent.",
+     "agent_readiness"),
+    # checkout_reliability (3)
+    ("An agent abandoned a $400 cart because our coupon field wasn't machine-readable.",
+     "checkout_reliability"),
+    ("A protocol update broke our agent checkout twice last quarter — silently.",
+     "checkout_reliability"),
+    ("We only caught the conformance gap because revenue from AI traffic flatlined.",
+     "checkout_reliability"),
+    # discoverability (3)
+    ("Perplexity recommended a competitor because our feed wasn't structured for agents.",
+     "discoverability"),
+    ("If ChatGPT can't parse your product, you don't exist to the buyer.",
+     "discoverability"),
+    ("Agent traffic is now one in six sessions and we were invisible to all of it.",
+     "discoverability"),
+    # protocol_conformance (3)
+    ("The UCP vs ACP differences are exactly where our flow silently failed.",
+     "protocol_conformance"),
+    ("We needed a readiness score we could show the board, not a vibe check.",
+     "protocol_conformance"),
+    ("Fault injection caught the edge case that would have cost us Black Friday.",
+     "protocol_conformance"),
 ]
 
-SAAS_FOUNDER: list[tuple[str, str]] = [
-    # self_serve (4)
-    ("I needed something I could plug in this afternoon, not a 3-month migration.",
-     "self_serve"),
-    ("Signed up at 2pm, sending first email by 4pm. That was the test.",
-     "self_serve"),
-    ("If I have to talk to sales before I can try it, I move on.",
-     "self_serve"),
-    ("Self-serve onboarding means I can decide if it works on a weekend.",
-     "self_serve"),
-    # pricing_transparency (3)
-    ("Pricing was clear. No 'contact sales for enterprise' nonsense.",
-     "pricing_transparency"),
-    ("I budgeted from the pricing page. No surprise quote.",
-     "pricing_transparency"),
-    ("Annual commitment is the right ask once I've used it for a month.",
-     "pricing_transparency"),
-    # speed_to_iterate (3)
-    ("We test five variants in the time we used to test one.",
-     "speed_to_iterate"),
-    ("Iteration speed is the only moat at our size.",
-     "speed_to_iterate"),
-    ("If I have to wait a sprint for a config change, I'm using the wrong tool.",
-     "speed_to_iterate"),
+# E-commerce / digital leaders at brands + retailers.
+ECOM_LEADER: list[tuple[str, str]] = [
+    # agent_observability (3)
+    ("AI-driven sessions convert differently and we had no instrumentation for them.",
+     "agent_observability"),
+    ("Observability for agent checkout is the gap our APM never filled.",
+     "agent_observability"),
+    ("We run human A/B tests but had zero coverage on agent journeys.",
+     "agent_observability"),
+    # readiness_as_kpi (3)
+    ("Leadership asked 'are we agent-ready?' and no one could answer with data.",
+     "readiness_as_kpi"),
+    ("Half our roadmap is agentic commerce; none of our QA covered it.",
+     "readiness_as_kpi"),
+    ("We needed one number — a readiness score — to prioritize the work.",
+     "readiness_as_kpi"),
 ]
 
-AE_GROWTH: list[tuple[str, str]] = [
-    # list_quality (4)
-    ("The list-build feature alone justifies the price.",
-     "list_quality"),
-    ("We've stopped buying third-party data. The native enrichment is enough.",
-     "list_quality"),
-    ("Lookalike lists from our actual customers — that's what was missing.",
-     "list_quality"),
-    ("We tripled list quality and halved list size. Replies went up.",
-     "list_quality"),
-    # process_over_intuition (4)
-    ("Outbound used to be a guessing game. Now it's a process.",
-     "process_over_intuition"),
-    ("The team's bad days look like other teams' good days because the process holds.",
-     "process_over_intuition"),
-    ("We can onboard a new SDR in a week. The system carries the institutional memory.",
-     "process_over_intuition"),
-    ("Repeatability beats heroics. This makes us repeatable.",
-     "process_over_intuition"),
+# Payment providers, PSPs, card networks / issuers.
+PAYMENTS_NETWORK: list[tuple[str, str]] = [
+    # payment_assurance (3)
+    ("Agent payment mandates are easy to issue and hard to test end to end.",
+     "payment_assurance"),
+    ("We need to prove an agent transaction was authorized before it settles.",
+     "payment_assurance"),
+    ("Issuers want assurance the agent had delegated authority — we had logs, not proof.",
+     "payment_assurance"),
+    # agent_fraud (3)
+    ("Fraud patterns from autonomous agents don't look like human fraud.",
+     "agent_fraud"),
+    ("AP2 and ACP both touch our rails; conformance testing was manual and brittle.",
+     "agent_fraud"),
+    ("Tokenized agent credentials fail in ways our old test suite never imagined.",
+     "agent_fraud"),
+]
+
+# Agentic buyer platforms + teams building shopping/commerce agents.
+AGENT_PLATFORM: list[tuple[str, str]] = [
+    # integration_conformance (3)
+    ("Our shopping agent passed demos and failed real merchant checkout flows.",
+     "integration_conformance"),
+    ("Every merchant implements MCP slightly differently — we needed conformance signals.",
+     "integration_conformance"),
+    ("We needed to certify a merchant integration before shipping it to users.",
+     "integration_conformance"),
+    # agent_reliability (3)
+    ("Tool calls that work on one store 500 on another; we were flying blind.",
+     "agent_reliability"),
+    ("WebMCP and A2A interop bugs only show up under multi-session load.",
+     "agent_reliability"),
+    ("Deterministic and agentic test modes let us reproduce the flaky checkout.",
+     "agent_reliability"),
 ]
 
 
@@ -97,29 +106,38 @@ def build_voice_docs(rng) -> list[dict]:
     when called from seed_demo.
     """
     quotes: list[dict] = []
-    for text, theme in REVOPS_DIRECTOR:
+    for text, theme in MERCHANT_DTC:
         quotes.append({
             "text": text,
-            "icp_segment": "seg_revops_director",
-            "persona": "rev_ops_director",
+            "icp_segment": "seg_merchant_dtc",
+            "persona": "merchant",
             "source": f"sales_call_{rng.randint(1000, 9999)}",
             "theme": theme,
             "sentiment": "positive",
         })
-    for text, theme in SAAS_FOUNDER:
+    for text, theme in ECOM_LEADER:
         quotes.append({
             "text": text,
-            "icp_segment": "seg_saas_founder",
-            "persona": "founder",
+            "icp_segment": "seg_ecom_leader",
+            "persona": "ecom_leader",
             "source": f"nps_{rng.randint(1000, 9999)}",
             "theme": theme,
             "sentiment": "positive",
         })
-    for text, theme in AE_GROWTH:
+    for text, theme in PAYMENTS_NETWORK:
         quotes.append({
             "text": text,
-            "icp_segment": "seg_ae_growth",
-            "persona": "ae",
+            "icp_segment": "seg_payments_network",
+            "persona": "payments_lead",
+            "source": f"sales_call_{rng.randint(1000, 9999)}",
+            "theme": theme,
+            "sentiment": "positive",
+        })
+    for text, theme in AGENT_PLATFORM:
+        quotes.append({
+            "text": text,
+            "icp_segment": "seg_agent_platform",
+            "persona": "agent_builder",
             "source": f"support_{rng.randint(1000, 9999)}",
             "theme": theme,
             "sentiment": "positive",

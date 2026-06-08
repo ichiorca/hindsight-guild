@@ -45,7 +45,7 @@ export default function DraftingPage() {
   const [searchParams] = useSearchParams();
   const initialAgent = searchParams.get("agent") || "pipeline";
 
-  const [icp, setIcp] = useState("seg_founder_b2b");
+  const [icp, setIcp] = useState("seg_merchant_dtc");
   const [channel, setChannel] = useState("linkedin");
   const [topic, setTopic] = useState("");
   const [visualPref, setVisualPref] = useState("auto");

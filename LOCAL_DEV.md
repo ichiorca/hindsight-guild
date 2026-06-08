@@ -393,6 +393,64 @@ spending API quota.
   uvicorn `--reload` wipes it. Reload of the API while a draft is in flight
   loses the job; the UI will surface it as an error and the user re-clicks.
 
+## Testing the signal pollers (PRD-02)
+
+The signal watcher polls HN / Reddit / RSS, scores events against the ICP
+keywords, and writes them to `signals` (+ a `customer_voice` mirror); the
+router turns high-scoring signals into drafts. To verify the pollers hit the
+**real** endpoints (the unit tests stub the network), run the opt-in live test:
+
+```bash
+docker compose up -d mongo
+LIVE_SIGNAL_TEST=1 MONGO_URI_DIRECT="mongodb://localhost:27017" \
+  python -m pytest tests/integration/test_signal_pollers_live.py -q -s
+```
+
+It hits HN / Reddit / RSS live and runs `signal_watcher.run_once` end-to-end
+against a throwaway `hindsight_guild_polltest` DB. It auto-skips without
+`LIVE_SIGNAL_TEST=1`, so it never runs in CI.
+
+**No credentials needed for the defaults.** Reddit content comes in through
+its public Atom `.rss` feeds (the `reddit-*-rss` sources, read by the generic
+RSS adapter), so HN + Reddit-via-RSS all work out of the box — Reddit's
+rate-limited JSON API is avoided entirely. The OAuth-based `reddit` sources are
+seeded but **disabled**; enable one (with `REDDIT_USE_OAUTH=1` + a Reddit app)
+only if you want richer scoring (upvotes/comments), and disable the matching
+`*-rss` source so the subreddit isn't double-fetched:
+
+```bash
+# create an app at https://www.reddit.com/prefs/apps ("script" or "web app")
+REDDIT_USE_OAUTH=1 REDDIT_CLIENT_ID=… REDDIT_CLIENT_SECRET=… \
+LIVE_SIGNAL_TEST=1 MONGO_URI_DIRECT="mongodb://localhost:27017" \
+  python -m pytest tests/integration/test_signal_pollers_live.py::test_reddit_adapter_live -q -s
+```
+
+`client_id` + `client_secret` alone use the app-only grant (read-only, enough
+for polling); add `REDDIT_USERNAME` + `REDDIT_PASSWORD` for the script-app
+grant. All four also resolve from Secret Manager in prod (`reddit_*` secrets).
+
+You can also drive it through the running API: `POST /api/signals/poll-now`
+(real poll of enabled sources) then `GET /api/signals` to inspect, then
+`POST /api/signals/route-now` to enqueue drafts.
+
+## Testing the AEO loop (PRD-01)
+
+The deterministic AEO mechanics (composite scoring, passage-block detection,
+escalation gate, eval-score injection, audit writes) are covered cloud-free by
+`tests/unit/test_aeo_loop.py`. To exercise the **real** Scorer→Reviser→Gate
+loop on Gemini against a low-AEO draft:
+
+```bash
+GOOGLE_GENAI_USE_VERTEXAI=0 LOCAL_OVERRIDE_MODEL=gemini-2.5-flash \
+AEO_LIVE_TEST=1 MONGO_URI_DIRECT="mongodb://localhost:27017" \
+  python -m pytest tests/integration/test_aeo_loop_live.py -q -s
+```
+
+`LOCAL_OVERRIDE_MODEL` is required: the agents default to `gemini-3.x`
+(Vertex-only) and the model is resolved at import time, so the AI-Studio key
+needs a Developer-API model. `AEO_SKIP=1` turns the loop into a pass-through
+(useful when debugging the rest of the pipeline).
+
 ## Cleanup
 
 ```bash
@@ -425,6 +483,14 @@ python -m scripts.local_seed
 | `DRAFTING_FALLBACK`  | `synthetic` = `/api/draft` composes from Mongo when A2A is unreachable. |
 | `PROJECT_ID`         | Required by some modules at import time; any string works locally. |
 | `TELEMETRY_DISABLED` | `1` = agent callbacks skip BQ telemetry writes.             |
+| `REDDIT_USE_OAUTH`   | `1` = Reddit adapter authenticates (needed for the `reddit-*` sources to return data); blank = public path. |
+| `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` | Reddit app creds (app-only grant); optional `REDDIT_USERNAME`/`REDDIT_PASSWORD` for script-app grant. |
+| `LIVE_SIGNAL_TEST`   | `1` = run the live HN/Reddit/RSS poller test (opt-in; network).  |
+| `SIGNAL_WATCHER_DISABLED` / `SIGNAL_AUTO_DRAFT` | Mute ingestion / stop auto-draft routing. |
+| `SIGNAL_MAX_PER_TICK` | Max signal-triggered drafts the router enqueues per tick (default 3). |
+| `AEO_SKIP` | `1` = replace the AEO loop with a pass-through (skip scoring/rewrite). |
+| `AEO_LIVE_TEST` | `1` = run the live AEO loop test (opt-in; LLM + network). |
+| `LOCAL_OVERRIDE_MODEL` | Force every agent to one model (e.g. `gemini-2.5-flash`) for the local AI-Studio key. |
 
 ## Troubleshooting
 

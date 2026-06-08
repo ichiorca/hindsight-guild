@@ -233,6 +233,20 @@ def _aeo_scorer_after_callback(callback_context):  # type: ignore[no-untyped-def
             except (TypeError, ValueError):
                 score = None
 
+        # Robustness: a later loop pass can return unparseable output (LLMs
+        # sometimes reply conversationally on the 2nd turn instead of re-scoring).
+        # Don't let that null a previously-good score — at the gate, None reads
+        # as a channel-skip, which would discard the earlier pass's score AND the
+        # reviser's improvement and ship the draft as "AEO not applicable".
+        # Retain the last good score; only fall through to None when we've never
+        # produced one this run.
+        if score is None:
+            prior = state.get("_aeo_last_good")
+            if isinstance(prior, dict) and isinstance(
+                    prior.get("answer_extractability"), (int, float)):
+                state["aeo_score"] = prior
+                return _scorer_telemetry_cb(callback_context)
+
         normalized = {
             "answer_extractability": score,
             "sub_signals": sub,
@@ -242,6 +256,9 @@ def _aeo_scorer_after_callback(callback_context):  # type: ignore[no-untyped-def
         state["aeo_score"] = normalized
 
         if score is not None:
+            # Stash the latest good score so a degraded re-score pass can fall
+            # back to it (see the None-handling above).
+            state["_aeo_last_good"] = normalized
             tid = state.get("telemetry_id")
             if tid:
                 _inject_aeo_into_eval_scores(tid, score)

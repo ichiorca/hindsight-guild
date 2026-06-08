@@ -55,42 +55,85 @@ _ADAPTER_MODULES = {
 # from accepted signal-drafts over time.
 # ---------------------------------------------------------------------------
 
+# Agentic-commerce ICP segments. signalCommerce sells the testing/trust
+# (agent-readiness + protocol-conformance) layer, so buying signals cluster
+# around merchants going agent-ready, agent-checkout breakage, and the
+# protocols/surfaces that mediate agent transactions. Merchants are the
+# primary ICP. These keys are signal-layer-only (see ICP_LABELS in web for
+# display names); the legacy app taxonomy is unchanged.
 _ICP_KEYWORDS = {
-    "seg_revops_director":  ("revops", "renewal", "csm", "handoff", "nrr"),
-    "seg_founder_b2b":      ("founder", "saas", "startup", "go-to-market", "gtm"),
-    "seg_pmm_growth":       ("positioning", "pmm", "launch", "messaging", "product marketing"),
-    "seg_ae_growth":        ("sales", "ae", "quota", "pipeline", "outbound"),
-    "seg_saas_founder":     ("founder", "saas", "indie", "bootstrap"),
+    # PRIMARY — DTC / e-commerce merchants that must become "agent-ready".
+    "seg_merchant_dtc": (
+        "agentic commerce", "agent-ready", "ai shopping", "chatgpt shop",
+        "instant checkout", "shopify", "magento", "dtc", "d2c",
+        "product feed", "agent checkout", "sell on chatgpt", "gemini shopping",
+    ),
+    # E-commerce / digital / growth leaders at brands + retailers.
+    "seg_ecom_leader": (
+        "agentic commerce", "conversational commerce", "agent checkout",
+        "ai agent traffic", "conversion rate", "aov", "checkout flow",
+        "headless commerce", "product catalog", "omnichannel", "retail media",
+    ),
+    # Payment providers, PSPs, card networks / issuers enabling agent payments.
+    "seg_payments_network": (
+        "agent payments", "agentic checkout", "ap2", "acp", "ucp", "x402",
+        "tokenization", "payment mandate", "verifiable credential",
+        "agent authentication", "visa intelligent commerce",
+        "mastercard agent pay", "issuer", "chargeback",
+    ),
+    # Agentic buyer platforms + teams building shopping/commerce agents.
+    "seg_agent_platform": (
+        "shopping agent", "mcp", "model context protocol", "a2a", "webmcp",
+        "ucp", "acp", "checkout api", "tool calling", "google ai mode",
+        "copilot checkout", "agent framework", "build an agent",
+    ),
 }
 
+# Pain — signalCommerce's thesis: when agent protocols break there is no
+# fallback, just lost revenue. Apostrophe-free fragments so they match
+# "fails"/"failed"/"failure" etc. without entity-decode surprises.
 _PAIN_KEYWORDS = (
-    "broken", "slipping", "leaking", "drift", "drop", "missed", "stalled",
-    "frustration", "headache", "pain", "struggling",
+    "protocol break", "conformance gap", "not agent-ready", "broken checkout",
+    "checkout fail", "failed checkout", "lost revenue", "cart abandonment",
+    "abandoned cart", "checkout error", "hallucinated price", "out of stock",
+    "invisible to ai", "integration broke", "stopped working", "lost sales",
 )
 
 _SOLUTION_INTENT_KEYWORDS = (
-    "looking for", "recommend", "alternative to", "tool", "anyone using",
-    "what do you use", "best way",
+    "agent-ready", "test agent", "validate agent", "readiness score",
+    "protocol conformance", "agent checkout testing", "how to sell on chatgpt",
+    "observability", "looking for", "alternative to", "best way to",
+    "anyone using",
 )
 
 _NEGATIVE_PATTERN_KEYWORDS = (
-    "don't recommend", "avoid", "switching from", "stopped using",
-    "doesn't work", "disappointed",
+    "switching from", "stopped using", "doesnt support agents",
+    "does not support agents", "doesnt work", "broke after", "avoid",
+    "deprecated", "migrating off",
+)
+
+# Protocol / surface signal — revives PRD-02 §6's omitted "competitor" slot
+# (x1.2) as an on-topic booster for the agentic-commerce protocols + buying
+# surfaces. A post mentioning any of these is almost certainly in-domain.
+_PLATFORM_KEYWORDS = (
+    "ucp", "acp", "mcp", "a2a", "webmcp", "ap2", "x402",
+    "chatgpt shop", "instant checkout", "copilot checkout", "google ai mode",
+    "gemini shopping", "perplexity", "rufus", "visa intelligent commerce",
+    "mastercard agent pay",
 )
 
 
 def _icp_fit_boost(text: str, icp_segment: str | None) -> float:
     """Compute the multiplicative ICP-fit boost for an event's text.
 
-    Multipliers (from PRD-02 §6):
-      * 1.4 for primary ICP keyword match
-      * 1.3 for pain keyword
+    Multipliers (PRD-02 §6, tuned for agentic commerce):
+      * 1.4 for primary ICP keyword match (per icp_segment)
+      * 1.3 for pain keyword (agent-checkout / conformance breakage)
       * 1.5 for solution-intent keyword
-      * 1.6 for negative-pattern keyword
+      * 1.6 for negative-pattern keyword (switching / dissatisfaction)
+      * 1.2 for protocol/surface keyword (UCP/ACP/MCP/AP2/ChatGPT Shop/…)
 
-    Competitor name is omitted in MVP 1 — we don't have a seeded
-    competitor list yet; PRD-03's signal_miner can propose one.
-
+    Hits stack multiplicatively; the caller caps base*boost at 1.0.
     Returns 1.0 (neutral) when no keywords match.
     """
     if not text:
@@ -106,6 +149,8 @@ def _icp_fit_boost(text: str, icp_segment: str | None) -> float:
         boost *= 1.5
     if any(kw in lower for kw in _NEGATIVE_PATTERN_KEYWORDS):
         boost *= 1.6
+    if any(kw in lower for kw in _PLATFORM_KEYWORDS):
+        boost *= 1.2
     return boost
 
 
@@ -216,6 +261,7 @@ def _process_source(db, source_doc: dict) -> dict:
 
             row = {
                 "source":            ev.get("source"),
+                "source_name":       name,
                 "ts":                datetime.now(UTC),
                 "evidence_url":      ev.get("evidence_url"),
                 "evidence_excerpt":  ev.get("evidence_excerpt"),

@@ -12,6 +12,17 @@ from shared import mongo_tools
 
 router = APIRouter()
 
+# Playbook skills carry a logical version label ('v0' at genesis) rather than a
+# prompt filename, so the body endpoint maps each to its canonical prompt file
+# (relative to prompts/). Keep in sync with mongo/data/skills.py + the prompt
+# files that ship in prompts/content/.
+_PLAYBOOK_DEFAULT_PROMPT = {
+    "linkedin_post": "content/linkedin_post_v3.txt",
+    "nurture_email": "content/nurture_email_v2.txt",
+    "blog_outline":  "content/blog_outline_v1.txt",
+    "substack_post": "content/substack_post_v1.txt",
+}
+
 
 @router.get("/api/skills")
 def list_skills():
@@ -64,12 +75,20 @@ def get_skill_body(skill_id: str, version: str | None = None) -> dict:
             "source_path": str(candidate.relative_to(repo_root)),
         }
 
-    # Playbook skill — derive prompts subdir from the skill_id family.
-    # The convention is: prompts/<family>/<version>.txt where family is
-    # 'content' for drafting skills, 'review', 'research', 'cmo_planner'.
-    # We probe a small set of known subdirs to find the file.
+    # Playbook skill — bodies live at prompts/<family>/<file>.txt.
+    # Historically the version field WAS the filename. With the v0 genesis
+    # baseline (mongo/data/skills.py) the version is a logical label, so we
+    # map each playbook to its canonical prompt file. Explicit filename
+    # versions (?version=<file>.txt, candidate files) still resolve directly.
     subdirs = ["content", "review", "research", "cmo_planner"]
-    candidates = [repo_root / "prompts" / d / v for d in subdirs]
+    if v.endswith((".txt", ".md")):
+        candidates = [repo_root / "prompts" / d / v for d in subdirs]
+    else:
+        rel = _PLAYBOOK_DEFAULT_PROMPT.get(skill_id)
+        candidates = [repo_root / "prompts" / rel] if rel else []
+        # Convention fallback: prompts/<family>/<skill_id>_<version>.txt
+        candidates += [repo_root / "prompts" / d / f"{skill_id}_{v}.txt"
+                       for d in subdirs]
     found = next((c for c in candidates if c.is_file()), None)
     if not found:
         raise HTTPException(
@@ -80,8 +99,9 @@ def get_skill_body(skill_id: str, version: str | None = None) -> dict:
     return {
         "body": found.read_text(encoding="utf-8"),
         "format": "text",
-        # Clean label: strip the '.txt' and the leading '<skill_id>_' so
-        # 'linkedin_post_v3.txt' renders as 'v3'.
+        # Clean label: a logical label ('v0') renders as-is; a filename
+        # ('linkedin_post_v3.txt') strips the '.txt' and the '<skill_id>_'
+        # prefix so it renders as 'v3'.
         "version_label": (
             v.removesuffix(".txt").replace(f"{skill_id}_", "")
             if v.startswith(skill_id) else v.removesuffix(".txt")

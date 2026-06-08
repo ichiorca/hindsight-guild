@@ -48,7 +48,7 @@ export async function kickoffDraft(
   maxWaitMs = 220_000,
 ): Promise<Record<string, unknown>> {
   const payload = {
-    icp_segment: opts.icp_segment ?? "seg_founder_b2b",
+    icp_segment: opts.icp_segment ?? "seg_merchant_dtc",
     channel: opts.channel ?? "linkedin",
     topic_hint: opts.topic_hint ?? "",
     ...(opts.agent_id && opts.agent_id !== "pipeline"

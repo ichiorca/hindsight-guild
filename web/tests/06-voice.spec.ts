@@ -22,8 +22,8 @@ test("voice: quote cards render with real text + theme + persona", async ({ page
   await expect(page.getByText(middle).first()).toBeVisible({ timeout: 5_000 });
 
   // Confirm at least one quote's persona is rendered as a metadata chip
-  // on a quote card. "founder" also appears in the ICP dropdown
-  // ("B2B founder"), so we have to scope the locator to the quote
+  // on a quote card. ICP labels (e.g. "Merchant / DTC brand") also appear
+  // in the ICP dropdown, so we have to scope the locator to the quote
   // cards section — the persona <span> inside Voice.tsx has class
   // "text-muted-foreground" and sits beside an icp Badge.
   const firstPersona = quotes[0].persona;
@@ -42,12 +42,12 @@ test("voice: quote cards render with real text + theme + persona", async ({ page
 test("voice: ICP filter narrows the visible quotes", async ({ page, request }) => {
   const all = await (await request.get("/api/voice")).json();
   const founderQuotes = all.filter((q: { icp_segment: string }) =>
-    q.icp_segment === "seg_founder_b2b",
+    q.icp_segment === "seg_merchant_dtc",
   );
 
   await navigate(page, "/voice");
-  // Pick "B2B founder" from the filter.
-  await page.locator("select").first().selectOption({ label: "B2B founder" });
+  // Pick "Merchant / DTC brand" from the filter.
+  await page.locator("select").first().selectOption({ label: "Merchant / DTC brand" });
   await page.waitForLoadState("networkidle");
 
   // If founder has quotes, at least one quote text should be visible.

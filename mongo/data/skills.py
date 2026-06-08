@@ -1,66 +1,63 @@
 """Skill (playbook) definitions.
 
+Seeded as a CLEAN GENESIS BASELINE: every playbook starts at version ``v0``
+with no prior history, no candidates, and no promotion provenance — nothing
+has run or been promoted yet. The self-learning loop (self_critique →
+promotion_gate → founder approval) is what later adds candidates, advances
+``current_version``, and records promotions; the seed must not fabricate that.
+
 Each skill has:
   - _id: stable identifier (linkedin_post, nurture_email, blog_outline)
-  - current_version: pointer to the prompt filename in prompts/<area>/
-  - candidates: alternate versions running alongside the incumbent
-  - history: every version ever shipped
+  - current_version: logical version label (telemetry attribution + the
+    candidate-rollout pointer in agents/pipeline.py). The incumbent draft body
+    does NOT load from this — it comes from the agent's instruction prompt.
+  - candidates: alternate versions running alongside the incumbent (empty at v0)
+  - history: every version ever shipped (just ["v0"] at genesis)
   - applies_to: ICP segments + channels this playbook serves
-  - promoted_at / promoted_from_experiment: provenance of the current version
 
 track_record is recomputed by demo/seed_demo._aggregate_track_records()
 after the synthetic actions are generated, so it reconciles with telemetry.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
-NOW = datetime(2026, 5, 26, 9, 0, tzinfo=UTC)
-
-
 SKILLS: list[dict] = [
     {
         "_id": "linkedin_post",
-        "current_version": "linkedin_post_v3.txt",
-        "candidates": ["linkedin_post_v4_candidate.txt"],
-        "history": ["linkedin_post_v1.txt", "linkedin_post_v2.txt",
-                    "linkedin_post_v3.txt"],
+        "current_version": "v0",
+        "candidates": [],
+        "history": ["v0"],
         "applies_to": {
-            "icp_segments": ["seg_revops_director", "seg_ae_growth"],
+            "icp_segments": ["seg_merchant_dtc", "seg_ecom_leader"],
             "channels": ["linkedin"],
         },
-        "promoted_at": NOW - timedelta(days=12),
-        "promoted_from_experiment": "exp_linkedin_hooks_q1",
     },
     {
         "_id": "nurture_email",
-        "current_version": "nurture_email_v2.txt",
+        "current_version": "v0",
         "candidates": [],
-        "history": ["nurture_email_v1.txt", "nurture_email_v2.txt"],
+        "history": ["v0"],
         "applies_to": {
-            "icp_segments": ["seg_revops_director"],
+            "icp_segments": ["seg_ecom_leader"],
             "channels": ["email"],
         },
-        "promoted_at": NOW - timedelta(days=20),
-        "promoted_from_experiment": "exp_subject_line_personalization",
     },
     {
         "_id": "blog_outline",
-        "current_version": "blog_outline_v1.txt",
+        "current_version": "v0",
         "candidates": [],
-        "history": ["blog_outline_v1.txt"],
+        "history": ["v0"],
         "applies_to": {
-            "icp_segments": ["seg_saas_founder"],
+            "icp_segments": ["seg_merchant_dtc"],
             "channels": ["blog"],
         },
     },
     {
         "_id": "substack_post",
-        "current_version": "substack_post_v1.txt",
+        "current_version": "v0",
         "candidates": [],
-        "history": ["substack_post_v1.txt"],
+        "history": ["v0"],
         "applies_to": {
-            "icp_segments": ["seg_saas_founder", "seg_revops_director"],
+            "icp_segments": ["seg_merchant_dtc", "seg_agent_platform"],
             "channels": ["substack"],
         },
     },

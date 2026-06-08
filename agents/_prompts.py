@@ -118,7 +118,7 @@ research-shaped context the Content Agent needs to draft for a given
 ICP + channel + campaign request.
 
 Inputs (read from session state):
-- icp_segment: the target ICP (e.g. seg_revops_director)
+- icp_segment: the target ICP (e.g. seg_merchant_dtc)
 - channel: linkedin | email | blog
 - topic_hint (optional): a phrase to focus on
 
@@ -446,7 +446,7 @@ For each validated proposal, write a document to
   "_id": "<short slug>",
   "kind": "new_claim" | "update_claim" | "retire_claim" | "icp_update",
   "claim_text": "<the proposed text>",
-  "applies_to_icp": ["<segment, e.g. {Icp.FOUNDER_B2B}>"],
+  "applies_to_icp": ["<segment, e.g. {Icp.MERCHANT_DTC}>"],
   "rationale": "<one paragraph: WHY this proposal>",
   "evidence": [
     {{"type": "experiment|customer_voice|negative_example|web", "id": "...", "url": "..."}}
@@ -478,8 +478,8 @@ Inputs you'll receive (one per invocation):
 - source_kind: sales_call | support_ticket | nps | churn_interview | community
 - source_id: an identifier for the source (call recording id, ticket #, etc.)
 - icp_segments: the list of ICP segment IDs available to assign to
-  (known values: '{Icp.FOUNDER_B2B}', '{Icp.REVOPS_DIRECTOR}',
-  '{Icp.AE_GROWTH}', '{Icp.PMM_GROWTH}')
+  (known values: '{Icp.MERCHANT_DTC}', '{Icp.ECOM_LEADER}',
+  '{Icp.PAYMENTS_NETWORK}', '{Icp.AGENT_PLATFORM}')
 
 What makes a good quote:
 - Specific (named tool, named workflow, named outcome — not abstract)
@@ -939,9 +939,9 @@ JSON envelope.  Required fields:
                           '{Channel.GOOGLE_ADS}' | '{Channel.META_ADS}' |
                           '{Channel.LINKEDIN_ADS}'
   icp_segment      str   from {Coll.MESSAGING_LIBRARY}.applies_to_icp;
-                          known values include '{Icp.FOUNDER_B2B}',
-                          '{Icp.REVOPS_DIRECTOR}', '{Icp.AE_GROWTH}',
-                          '{Icp.PMM_GROWTH}'
+                          known values include '{Icp.MERCHANT_DTC}',
+                          '{Icp.ECOM_LEADER}', '{Icp.PAYMENTS_NETWORK}',
+                          '{Icp.AGENT_PLATFORM}'
   success_metric   str   the OUTCOME SLOT name (e.g. "engagement_72h",
                           "open_rate_24h") OR "<rubric>_score" for an
                           eval-backed experiment (e.g. "brand_voice_score")

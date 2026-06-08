@@ -1014,7 +1014,7 @@ def _synthetic_draft(req: DraftRequest) -> dict:
 
     # ICP-scoped lookup with a graceful fallback: agent-driven inserts
     # occasionally tag voice quotes / approved claims under variant ICP
-    # slugs (``seg_saas_founder`` vs ``seg_founder_b2b``). Without a
+    # slugs (``seg_merchant_dtc`` vs ``seg_ecom_leader``). Without a
     # fallback, the synthetic preview shows an empty research section
     # for the "wrong" slug — the UI looks broken even though we have
     # plenty of data. Try the requested ICP first, then widen.

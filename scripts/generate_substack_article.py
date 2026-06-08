@@ -8,7 +8,7 @@ drafts/YYYY-MM-DD-<slug>.md so you can open it in your editor.
 Usage:
     python -m scripts.generate_substack_article \\
         --topic "Latest advancements in agentic commerce" \\
-        [--icp seg_founder_b2b]
+        [--icp seg_merchant_dtc]
 
 Reads GOOGLE_API_KEY + MONGO_URI_DIRECT from .env via the same tiny
 loader scripts/local_seed.py uses.
@@ -68,8 +68,8 @@ async def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--topic", required=True,
                    help='Article topic, e.g. "Latest advancements in agentic commerce"')
-    p.add_argument("--icp", default="seg_founder_b2b",
-                   help="ICP segment id (default: seg_founder_b2b)")
+    p.add_argument("--icp", default="seg_merchant_dtc",
+                   help="ICP segment id (default: seg_merchant_dtc)")
     p.add_argument("--out-dir", default=str(REPO_ROOT / "drafts"),
                    help="Directory to write the .md file (default: ./drafts/)")
     args = p.parse_args()

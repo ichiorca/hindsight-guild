@@ -208,7 +208,7 @@ test("drafting: ICP selector + topic both update the request payload", async ({ 
 
   const icpSelect = page.locator("label").filter({ hasText: /for \(icp/i })
     .locator("..").locator("select");
-  await icpSelect.selectOption("seg_revops_director");
+  await icpSelect.selectOption("seg_ecom_leader");
 
   await page.locator("input[placeholder*='handoff' i], input[placeholder*='topic' i]").first()
     .fill("e2e payload verification");
@@ -219,6 +219,6 @@ test("drafting: ICP selector + topic both update the request payload", async ({ 
   await submitDraftForm(page);
   const req = await reqPromise;
   const body = JSON.parse(req.postData() || "{}");
-  expect(body.icp_segment).toBe("seg_revops_director");
+  expect(body.icp_segment).toBe("seg_ecom_leader");
   expect(body.topic_hint).toContain("e2e payload verification");
 });

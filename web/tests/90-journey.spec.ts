@@ -207,9 +207,9 @@ test("journey: live ticker WS receives push when job is in flight", async ({ pag
   // Kick off a job via the API (don't await — we want it in-flight).
   request.post("/api/draft", {
     data: {
-      icp_segment: "seg_founder_b2b",
+      icp_segment: "seg_merchant_dtc",
       channel: "linkedin",
-      topic_hint: "ws ticker test",
+      topic_hint: "agent checkout ws ticker test",
       agent_id: "positioning_agent",
     },
   });
