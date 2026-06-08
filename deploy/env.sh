@@ -121,6 +121,7 @@ SECRETS_FOR_AGENTS=(
   reddit_client_secret
   reddit_username
   reddit_password
+  devto_api_key
   substack_api_key
   substack_publication_host
   substack_publication_id
