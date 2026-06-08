@@ -16,6 +16,7 @@ for job in "${!JOBS[@]}"; do
     --region="$REGION" \
     --service-account="$SA" \
     --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+    --set-secrets="${GENAI_SECRETS}" \
     --memory=1Gi --cpu=1 \
     --task-timeout=900s \
     --project="$PROJECT_ID"

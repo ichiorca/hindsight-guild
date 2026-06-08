@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from google.adk.agents import LlmAgent
 
 from agents._common import make_after_callback, make_model_armor_callback
-from agents._models import HEAVY, LIGHT, pick_model
+from agents._models import HEAVY, LIGHT, gen_content_config, pick_model
 
 
 @dataclass
@@ -84,6 +84,7 @@ def build_critique_reviser_pair(
     critique_agent = LlmAgent(
         name=spec.critique_agent_name,
         model=pick_model(spec.critique_model),
+        generate_content_config=gen_content_config(pick_model(spec.critique_model)),
         instruction=spec.critique_instructions,
         tools=list(spec.extra_critique_tools or []),
         output_key=spec.critique_state_key,
@@ -98,6 +99,7 @@ def build_critique_reviser_pair(
     reviser_agent = LlmAgent(
         name=spec.reviser_agent_name,
         model=pick_model(spec.reviser_model),
+        generate_content_config=gen_content_config(pick_model(spec.reviser_model)),
         instruction=spec.reviser_instructions,
         tools=list(spec.extra_reviser_tools or []),
         # CRITICAL: same output_key as upstream drafter — Reviser

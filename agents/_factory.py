@@ -25,7 +25,7 @@ from google.adk.agents import LlmAgent
 
 from agents._common import make_after_callback, make_model_armor_callback
 from agents._mcp import mongodb_toolset
-from agents._models import pick_model
+from agents._models import gen_content_config, pick_model
 from agents._skills_config import allowed_for, required_for
 from shared.skills import make_skill_tools, with_skills
 
@@ -80,9 +80,13 @@ def make_llm_agent(
         tools.extend(extra_tools)
     tools.extend(make_skill_tools(agent_name=name, allowed=read_gate))
 
+    resolved_model = pick_model(model)
     return LlmAgent(
         name=name,
-        model=pick_model(model),
+        model=resolved_model,
+        # Robust function calling across model families (AUTO tool_config +
+        # thinking disabled for gemini-2.5 to stop MALFORMED_FUNCTION_CALL).
+        generate_content_config=gen_content_config(resolved_model),
         instruction=with_skills(
             instructions,
             allowed=allowed,

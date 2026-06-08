@@ -15,6 +15,7 @@ from __future__ import annotations
 from shared.models import (  # noqa: F401  (re-export)
     HEAVY,
     LIGHT,
+    gen_content_config,
     heavy,
     light,
     model_for,

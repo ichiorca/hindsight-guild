@@ -104,6 +104,7 @@ declare -A SIGNAL_ENDPOINT_SCHEDULES=(
 # Secrets that sa-agents needs read access to. setup.sh creates these as
 # "PENDING" stubs; deploy/06-bind-iam.sh grants secretAccessor on each.
 SECRETS_FOR_AGENTS=(
+  google_api_key
   mongo_uri
   mongo_uri_readonly
   mongo_uri_writer
@@ -128,12 +129,19 @@ SECRETS_FOR_AGENTS=(
 )
 
 # Model tiers — resolved centrally in shared/models.py (HEAVY/LIGHT). Set them
-# here to target whatever models this project/region actually serves; the
-# AI-Studio-style gen-lang-client-* projects only have the 2.5 family
-# (gemini-3.x returns 404 on Vertex there). A project WITH 3.x access overrides
-# with MODEL_HEAVY=gemini-3.5-flash / MODEL_LIGHT=gemini-3.1-flash-lite.
-MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-2.5-flash},MODEL_LIGHT=${MODEL_LIGHT:-gemini-2.5-flash-lite}"
+# here to point a deployment at whatever its endpoint serves. Defaults are the
+# gemini-3.x flash tiers, which this account reaches via the Gemini Developer
+# API (configured below). On Vertex for this gen-lang-client-* project only the
+# 2.5 family exists, so a Vertex-based deployment would set
+# MODEL_HEAVY=gemini-2.5-flash / MODEL_LIGHT=gemini-2.5-flash-lite.
+MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-3.5-flash},MODEL_LIGHT=${MODEL_LIGHT:-gemini-3.1-flash-lite}"
 
-# Vertex AI env for the genai client (ADK). Without these the client falls
-# back to the keyless Gemini Developer API and LLM calls produce nothing.
-GENAI="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},${MODELS}"
+# genai client config for the agents. USE_VERTEXAI=false -> Gemini Developer API
+# (reads GOOGLE_API_KEY, mounted from Secret Manager via GENAI_SECRETS). 3.x is
+# served there but 404s on Vertex for this project. The Vertex AI *Eval* service
+# (shared/rubrics.py) is independent of this flag and keeps running on Vertex.
+GENAI="GOOGLE_GENAI_USE_VERTEXAI=false,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},${MODELS}"
+
+# Mounted as an env var (Cloud Run --set-secrets) so the Developer-API genai
+# client can authenticate. sa-agents gets secretAccessor via SECRETS_FOR_AGENTS.
+GENAI_SECRETS="GOOGLE_API_KEY=google_api_key:latest"

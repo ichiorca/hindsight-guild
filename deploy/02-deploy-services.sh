@@ -27,6 +27,7 @@ for name in "${!A2A_APPS[@]}"; do
     --region="$REGION" \
     --service-account="$SA" \
     --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+    --set-secrets="${GENAI_SECRETS}" \
     --memory=1Gi --cpu=1 \
     --no-allow-unauthenticated \
     --project="$PROJECT_ID"
@@ -65,6 +66,7 @@ gcloud run deploy edit-capture-handler \
   --region="$REGION" \
   --service-account="$SA" \
   --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+    --set-secrets="${GENAI_SECRETS}" \
   --memory=512Mi \
   --allow-unauthenticated \
   --project="$PROJECT_ID"
@@ -84,6 +86,7 @@ gcloud run deploy slack-approval-handler \
   --region="$REGION" \
   --service-account="$SA" \
   --set-env-vars="PROJECT_ID=${PROJECT_ID},${GENAI}" \
+    --set-secrets="${GENAI_SECRETS}" \
   --memory=256Mi \
   --allow-unauthenticated \
   --project="$PROJECT_ID"
@@ -94,6 +97,7 @@ gcloud run deploy substack-publisher \
   --region="$REGION" \
   --service-account="$SA" \
   --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+    --set-secrets="${GENAI_SECRETS}" \
   --memory=512Mi \
   --no-allow-unauthenticated \
   --project="$PROJECT_ID"
@@ -113,6 +117,7 @@ gcloud run deploy web-api \
   --region="$REGION" \
   --service-account="$SA" \
   --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+    --set-secrets="${GENAI_SECRETS}" \
   --memory=1Gi --cpu=1 \
   --allow-unauthenticated \
   --project="$PROJECT_ID"

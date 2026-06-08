@@ -75,3 +75,33 @@ def pick_model(default: str) -> str:
     """Back-compat entry point. Accepts a tier constant or a legacy literal;
     both resolve through :func:`model_for`."""
     return model_for(default)
+
+
+def gen_content_config(resolved_model: str):
+    """A ``GenerateContentConfig`` that makes ADK function calling robust across
+    Gemini model families. ``resolved_model`` is the concrete model name (post
+    :func:`model_for`).
+
+    - ``tool_config`` → AUTO: ask for explicit, structured function calls.
+    - gemini-2.5* emit *compositional* tool calls as code (``print(read_skill(
+      ...))``) plus ``<ctrl>`` thinking tokens when thinking is on (the default).
+      ADK 1.x can't parse those → ``MALFORMED_FUNCTION_CALL`` → dropped call →
+      empty draft. Disabling thinking for that family makes it emit clean
+      structured calls. gemini-3.x parses fine and keeps thinking, so we leave
+      its config alone.
+
+    Returns a config safe to attach to any agent regardless of which model the
+    environment resolves to.
+    """
+    from google.genai import types as t
+
+    cfg = t.GenerateContentConfig(
+        tool_config=t.ToolConfig(
+            function_calling_config=t.FunctionCallingConfig(
+                mode=t.FunctionCallingConfigMode.AUTO,
+            ),
+        ),
+    )
+    if str(resolved_model).startswith("gemini-2.5"):
+        cfg.thinking_config = t.ThinkingConfig(thinking_budget=0)
+    return cfg

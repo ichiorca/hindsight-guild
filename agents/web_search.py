@@ -15,7 +15,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools import google_search
 from google.adk.tools.agent_tool import AgentTool
 
-from agents._models import LIGHT, pick_model
+from agents._models import LIGHT, gen_content_config, pick_model
 
 _SEARCH_INSTRUCTIONS = """You are the team's web-search specialist. Given a
 query, return the most useful, RECENT, and factually anchored information
@@ -49,6 +49,7 @@ not opinion.
 _web_search_agent = LlmAgent(
     name="web_search",
     model=pick_model(LIGHT),
+    generate_content_config=gen_content_config(pick_model(LIGHT)),
     description=(
         "Web-search specialist. Call this when you need recent / current "
         "information that wouldn't be in our local data (latest "
