@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from google.adk.agents import LlmAgent
 
 from agents._common import make_after_callback, make_model_armor_callback
-from agents._models import pick_model
+from agents._models import HEAVY, LIGHT, pick_model
 
 
 @dataclass
@@ -48,8 +48,8 @@ class CritiqueSpec:
     critique_state_key: str        # where the critique JSON lands
 
     # Models.
-    critique_model: str = "gemini-3.1-flash-lite"   # critic doesn't need frontier
-    reviser_model: str = "gemini-3.5-flash"         # revising matches drafter
+    critique_model: str = LIGHT   # critic doesn't need frontier
+    reviser_model: str = HEAVY         # revising matches drafter
 
     # Telemetry skill_id (already in the skills collection).
     critique_skill_id: str = "domain_critique"

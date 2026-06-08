@@ -12,6 +12,7 @@ have a transcript to digest.
 from __future__ import annotations
 
 from agents._factory import make_llm_agent
+from agents._models import LIGHT
 from agents._prompts import CUSTOMER_VOICE_INSTRUCTIONS
 
 # mongo_tools defaults to mongo_uri_writer; explicit setter removed (see C5).
@@ -19,7 +20,7 @@ from agents._prompts import CUSTOMER_VOICE_INSTRUCTIONS
 customer_voice_agent = make_llm_agent(
     name="customer_voice_agent",
     instructions=CUSTOMER_VOICE_INSTRUCTIONS,
-    model="gemini-3.1-flash-lite",
+    model=LIGHT,
     mode="write",
     output_key="voice_ingest",
     skill_id="voice_ingest",

@@ -27,6 +27,7 @@ from datetime import UTC, datetime
 from google.adk.tools import FunctionTool
 
 from agents._factory import make_llm_agent
+from agents._models import HEAVY
 from agents._prompts import SELF_CRITIQUE_INSTRUCTIONS
 from agents._schema_constants import Coll, Status
 from shared.bigquery_helper import bigquery_query
@@ -220,7 +221,7 @@ propose_skill_revision_tool = FunctionTool(func=propose_skill_revision)
 self_critique_agent = make_llm_agent(
     name="self_critique_agent",
     instructions=SELF_CRITIQUE_INSTRUCTIONS,
-    model="gemini-3.5-flash",
+    model=HEAVY,
     mode="write",
     output_key="self_critique",
     skill_id="self_critique_weekly",

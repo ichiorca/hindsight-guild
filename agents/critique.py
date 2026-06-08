@@ -22,12 +22,12 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from agents._common import make_after_callback, make_model_armor_callback
-from agents._models import pick_model
+from agents._models import LIGHT, pick_model
 from agents._prompts import CRITIQUE_INSTRUCTIONS
 
 critique_agent = LlmAgent(
     name="critique_agent",
-    model=pick_model("gemini-3.1-flash-lite"),
+    model=pick_model(LIGHT),
     instruction=CRITIQUE_INSTRUCTIONS,
     tools=[],   # pure reading / writing of state; no external lookups
     output_key="critique",

@@ -21,6 +21,7 @@ import logging
 from google.adk.tools import FunctionTool
 
 from agents._factory import make_llm_agent
+from agents._models import LIGHT
 from agents._prompts import RESEARCH_INSTRUCTIONS
 from agents.web_search import web_search_tool
 
@@ -62,7 +63,7 @@ search_past_lessons_tool = FunctionTool(func=search_past_lessons)
 research_agent = make_llm_agent(
     name="research_agent",
     instructions=RESEARCH_INSTRUCTIONS,
-    model="gemini-3.1-flash-lite",
+    model=LIGHT,
     mode="write",
     output_key="research_findings",
     skill_id="research_scan",

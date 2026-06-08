@@ -18,6 +18,7 @@ from google.adk.tools import FunctionTool
 
 from agents._factory import make_llm_agent
 from agents._image_safety import check_image_safety_tool
+from agents._models import LIGHT
 from agents._prompts import IMAGE_BRIEF_INSTRUCTIONS
 from shared import diagrams, imagen
 
@@ -84,7 +85,7 @@ diagram_generate_tool = FunctionTool(func=diagram_generate)
 image_brief_agent = make_llm_agent(
     name="image_brief_agent",
     instructions=IMAGE_BRIEF_INSTRUCTIONS,
-    model="gemini-3.1-flash-lite",
+    model=LIGHT,
     mode=None,
     output_key="images",
     skill_id="image_brief",

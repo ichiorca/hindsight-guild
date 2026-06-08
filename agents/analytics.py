@@ -11,6 +11,7 @@ import os
 from google.adk.tools import FunctionTool
 
 from agents._factory import make_llm_agent
+from agents._models import LIGHT
 from agents._prompts import ANALYTICS_INSTRUCTIONS
 from shared.bigquery_helper import bigquery_query
 
@@ -24,7 +25,7 @@ bigquery_query_tool = FunctionTool(func=bigquery_query)
 analytics_agent = make_llm_agent(
     name="analytics_agent",
     instructions=ANALYTICS_INSTRUCTIONS,
-    model="gemini-3.1-flash-lite",
+    model=LIGHT,
     mode=None,
     output_key="analytics_snapshot",
     skill_id="weekly_snapshot",

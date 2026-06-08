@@ -8,7 +8,7 @@
 # When the playbook stabilizes, port to ADK (~1 day) so it lives in code.
 
 agent: cmo_planner
-model: gemini-3.5-flash
+model: gemini-2.5-flash
 
 instructions: |
   ${file:prompts/cmo_planner/weekly_memo_v1.txt}

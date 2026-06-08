@@ -50,7 +50,7 @@ from google.adk.events.event_actions import EventActions
 from google.adk.tools.function_tool import FunctionTool
 
 from agents._common import make_after_callback, make_model_armor_callback
-from agents._models import pick_model
+from agents._models import HEAVY, LIGHT, pick_model
 from agents._prompts import AEO_REVISER_INSTRUCTIONS, AEO_SCORER_INSTRUCTIONS
 from scripts.aeo import content_quality as _cq
 from scripts.aeo import passage_blocks as _pb
@@ -279,7 +279,7 @@ _scorer_telemetry_cb = make_after_callback(
 
 aeo_scorer_agent = LlmAgent(
     name="aeo_scorer",
-    model=pick_model("gemini-3.1-flash-lite"),  # cheap — deterministic-ish work
+    model=pick_model(LIGHT),  # cheap — deterministic-ish work
     instruction=AEO_SCORER_INSTRUCTIONS,
     tools=[
         FunctionTool(aeo_content_quality),
@@ -359,7 +359,7 @@ _reviser_telemetry_cb = make_after_callback(
 
 aeo_reviser_agent = LlmAgent(
     name="aeo_reviser",
-    model=pick_model("gemini-3.5-flash"),   # same model as content/reviser — restructuring
+    model=pick_model(HEAVY),   # same model as content/reviser — restructuring
     instruction=AEO_REVISER_INSTRUCTIONS,
     tools=[],
     output_key="draft",   # OVERWRITES content/reviser's draft

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from agents._evidence_tool import evidence_validator_tool
 from agents._factory import make_llm_agent
+from agents._models import HEAVY
 from agents._prompts import POSITIONING_INSTRUCTIONS
 from agents.web_search import web_search_tool
 
@@ -16,7 +17,7 @@ from agents.web_search import web_search_tool
 positioning_agent = make_llm_agent(
     name="positioning_agent",
     instructions=POSITIONING_INSTRUCTIONS,
-    model="gemini-3.5-flash",
+    model=HEAVY,
     mode="write",
     output_key="positioning_proposals",
     skill_id="positioning_maintenance",

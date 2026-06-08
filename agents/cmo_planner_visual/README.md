@@ -7,7 +7,7 @@ memo looks like; Agent Designer's UI makes that iteration trivial.
 ## Build steps (Console)
 
 1. Open the Agent Builder Console → **Agent Designer** → **New Agent**.
-2. **Name**: `cmo_planner`. **Model**: `gemini-3.5-flash`.
+2. **Name**: `cmo_planner`. **Model**: `gemini-2.5-flash`.
 3. **Instructions**: paste the contents of `prompts/cmo_planner/weekly_memo_v1.txt`.
 4. **Tools** — attach from Tool Hub (or wire directly):
    - `mongodb_mcp` — scope: full. (Uses `mongo_uri_writer` secret.)

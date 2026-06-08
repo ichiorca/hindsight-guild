@@ -7,6 +7,7 @@ after_agent_callback (Vertex AI Gen AI Evaluation Service, all 6 rubrics).
 from __future__ import annotations
 
 from agents._factory import make_llm_agent
+from agents._models import HEAVY
 from agents._prompts import CONTENT_INSTRUCTIONS
 
 # Read-only intent is enforced per-call inside shared/rubrics.py and
@@ -17,7 +18,7 @@ from agents._prompts import CONTENT_INSTRUCTIONS
 content_agent = make_llm_agent(
     name="content_agent",
     instructions=CONTENT_INSTRUCTIONS,
-    model="gemini-3.5-flash",
+    model=HEAVY,
     mode="read",
     output_key="draft",
     skill_id="linkedin_post",

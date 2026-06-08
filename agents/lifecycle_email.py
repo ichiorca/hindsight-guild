@@ -27,7 +27,7 @@ from agents._critique_factory import (
 )
 from agents._evidence_tool import evidence_validator_tool
 from agents._mcp import mongodb_toolset
-from agents._models import pick_model
+from agents._models import HEAVY, pick_model
 from agents._prompts import LIFECYCLE_EMAIL_INSTRUCTIONS
 from agents._skills_config import allowed_for, required_for
 from shared.skills import make_skill_tools, with_skills
@@ -43,7 +43,7 @@ _ALLOWED_SKILLS = allowed_for(_AGENT_NAME)
 
 lifecycle_email_drafter = LlmAgent(
     name=_DRAFTER_NAME,
-    model=pick_model("gemini-3.5-flash"),
+    model=pick_model(HEAVY),
     instruction=with_skills(LIFECYCLE_EMAIL_INSTRUCTIONS, allowed=_ALLOWED_SKILLS,
                             required=required_for(_DRAFTER_NAME)),
     tools=[

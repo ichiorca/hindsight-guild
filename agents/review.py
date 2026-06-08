@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from agents._evidence_tool import evidence_validator_tool
 from agents._factory import make_llm_agent
+from agents._models import LIGHT
 from agents._prompts import REVIEW_INSTRUCTIONS
 from agents.web_search import web_search_tool
 
@@ -17,7 +18,7 @@ from agents.web_search import web_search_tool
 review_agent = make_llm_agent(
     name="review_agent",
     instructions=REVIEW_INSTRUCTIONS,
-    model="gemini-3.1-flash-lite",
+    model=LIGHT,
     mode="read",
     output_key="review",
     skill_id="rubric_review",

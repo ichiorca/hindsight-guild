@@ -5,8 +5,8 @@ Writes to:
   - mongodb.negative_examples (rejects only)
   - mongodb.approvals (every decision)
 
-Edit classification: Gemini-3.1-Flash-Lite structured-output call. Cheaper than
-running a full ADK agent, richer than regex.
+Edit classification: a LIGHT-tier (shared.models) structured-output Gemini call.
+Cheaper than running a full ADK agent, richer than regex.
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from google import genai
 from mongo.history import update_with_history
 from shared import mongo_tools
 from shared.clients import bigquery_client
+from shared.models import light
 
 mongo_tools.use_secret("mongo_uri_writer")
 
@@ -74,7 +75,7 @@ def _classify_with_gemini(before: str, after: str, reason: str) -> dict:
             reason=reason or "(empty)",
         )
         resp = _genai.models.generate_content(
-            model="gemini-3.1-flash-lite",
+            model=light(),
             contents=prompt,
             config={"response_mime_type": "application/json"},
         )

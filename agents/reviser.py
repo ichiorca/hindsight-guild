@@ -15,12 +15,12 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from agents._common import make_after_callback, make_model_armor_callback
-from agents._models import pick_model
+from agents._models import HEAVY, pick_model
 from agents._prompts import REVISER_INSTRUCTIONS
 
 reviser_agent = LlmAgent(
     name="reviser_agent",
-    model=pick_model("gemini-3.5-flash"),   # heavy lift — same model as Content
+    model=pick_model(HEAVY),   # heavy lift — same model as Content
     instruction=REVISER_INSTRUCTIONS,
     tools=[],
     output_key="draft",   # OVERWRITES Content's first-pass draft

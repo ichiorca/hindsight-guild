@@ -31,12 +31,14 @@ from vertexai.evaluation import (
 )
 
 from shared import mongo_tools
+from shared.models import light
 
 log = logging.getLogger(__name__)
 
 PROJECT_ID = os.environ.get("PROJECT_ID", "hindsight-guild-mvp")
 LOCATION = os.environ.get("REGION", "us-central1")
-JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "gemini-3.1-flash-lite")
+# The eval judge is a LIGHT-tier model; JUDGE_MODEL still wins if set explicitly.
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL") or light()
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 

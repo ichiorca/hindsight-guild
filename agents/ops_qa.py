@@ -11,6 +11,7 @@ import httpx
 from google.adk.tools import FunctionTool
 
 from agents._factory import make_llm_agent
+from agents._models import LIGHT
 from agents._prompts import OPS_QA_INSTRUCTIONS
 
 # mongo_tools defaults to mongo_uri_writer; explicit setter removed (see C5).
@@ -72,7 +73,7 @@ utm_parse_tool = FunctionTool(func=utm_parse)
 ops_qa_agent = make_llm_agent(
     name="ops_qa_agent",
     instructions=OPS_QA_INSTRUCTIONS,
-    model="gemini-3.1-flash-lite",
+    model=LIGHT,
     mode="write",
     output_key="ops_scan",
     skill_id="ops_qa_scan",

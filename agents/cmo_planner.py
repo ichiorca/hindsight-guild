@@ -24,6 +24,7 @@ from google.cloud import secretmanager
 
 from agents._evidence_tool import evidence_validator_tool
 from agents._factory import make_llm_agent
+from agents._models import HEAVY
 from agents._prompts import CMO_PLANNER_INSTRUCTIONS
 from agents.analytics import analytics_agent
 from agents.research import research_agent
@@ -83,7 +84,7 @@ slack_approval_tool = FunctionTool(func=slack_approval)
 cmo_planner = make_llm_agent(
     name="cmo_planner",
     instructions=CMO_PLANNER_INSTRUCTIONS,
-    model="gemini-3.5-flash",
+    model=HEAVY,
     mode="write",
     output_key="weekly_plan",
     skill_id="weekly_memo",
