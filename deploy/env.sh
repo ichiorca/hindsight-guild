@@ -93,12 +93,12 @@ declare -A SCHEDULES=(
 # (POST /api/signals/poll-now and /route-now), so we poke those endpoints on a
 # cron instead of standing up dedicated jobs. Key = scheduler trigger name;
 # value = "<cron UTC>|<endpoint path>". The router is staggered 30 min after
-# the watcher so it routes the signals that same Sunday poll just wrote
-# (otherwise a same-minute router run would lag a full week).
+# the watcher so it routes the signals that same daily poll just wrote
+# (otherwise a same-minute router run would lag a full day).
 # ---------------------------------------------------------------------------
 declare -A SIGNAL_ENDPOINT_SCHEDULES=(
-  [signal-watcher]="0 0 * * SUN|/api/signals/poll-now"   # Sun 00:00 UTC — poll HN/Reddit/RSS
-  [signal-router]="30 0 * * SUN|/api/signals/route-now"  # Sun 00:30 UTC — route pending signals -> drafts
+  [signal-watcher]="0 0 * * *|/api/signals/poll-now"   # daily 00:00 UTC — poll HN/Reddit/RSS
+  [signal-router]="30 0 * * *|/api/signals/route-now"  # daily 00:30 UTC — route pending signals -> drafts
 )
 
 # Secrets that sa-agents needs read access to. setup.sh creates these as
@@ -130,11 +130,12 @@ SECRETS_FOR_AGENTS=(
 
 # Model tiers — resolved centrally in shared/models.py (HEAVY/LIGHT). Set them
 # here to point a deployment at whatever its endpoint serves. Defaults are the
-# gemini-3.x flash tiers, which this account reaches via the Gemini Developer
-# API (configured below). On Vertex for this gen-lang-client-* project only the
-# 2.5 family exists, so a Vertex-based deployment would set
-# MODEL_HEAVY=gemini-2.5-flash / MODEL_LIGHT=gemini-2.5-flash-lite.
-MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-3.5-flash},MODEL_LIGHT=${MODEL_LIGHT:-gemini-3.1-flash-lite}"
+# most capable models callable on this project's Vertex: gemini-2.5-pro (heavy)
+# + gemini-2.5-flash (light). The Developer API also serves the gemini-3.x
+# family, but its free-tier rate limits made the multi-agent pipeline time out
+# (ReadTimeout > 300s), so we run on Vertex (SA quotas). The gemini-2.5
+# thinking/function-call quirk is handled in shared/models.gen_content_config.
+MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-2.5-pro},MODEL_LIGHT=${MODEL_LIGHT:-gemini-2.5-flash}"
 
 # Diagram renderer URL — shared/diagrams.py reads MERMAID_RENDERER_URL to render
 # infographic/excalidraw diagrams (image_brief). Resolved from the live
@@ -142,11 +143,11 @@ MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-3.5-flash},MODEL_LIGHT=${MODEL_LIGHT:-
 # in which case diagrams degrade to a "pending" stub until the next deploy.
 MERMAID_RENDERER_URL="$(gcloud run services describe mermaid-renderer --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)' 2>/dev/null || true)"
 
-# genai client config for the agents. USE_VERTEXAI=false -> Gemini Developer API
-# (reads GOOGLE_API_KEY, mounted from Secret Manager via GENAI_SECRETS). 3.x is
-# served there but 404s on Vertex for this project. The Vertex AI *Eval* service
-# (shared/rubrics.py) is independent of this flag and keeps running on Vertex.
-GENAI="GOOGLE_GENAI_USE_VERTEXAI=false,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},${MODELS}"
+# genai client config for the agents. USE_VERTEXAI=true -> Vertex AI (SA-based;
+# no API key needed). GOOGLE_API_KEY is still mounted (GENAI_SECRETS) but is
+# ignored while USE_VERTEXAI=true, so flipping to the Developer API + gemini-3.x
+# is a one-line change. The Vertex AI Eval service (shared/rubrics.py) runs here.
+GENAI="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},${MODELS}"
 
 # Mounted as an env var (Cloud Run --set-secrets) so the Developer-API genai
 # client can authenticate. sa-agents gets secretAccessor via SECRETS_FOR_AGENTS.

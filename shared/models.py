@@ -86,9 +86,12 @@ def gen_content_config(resolved_model: str):
     - gemini-2.5* emit *compositional* tool calls as code (``print(read_skill(
       ...))``) plus ``<ctrl>`` thinking tokens when thinking is on (the default).
       ADK 1.x can't parse those → ``MALFORMED_FUNCTION_CALL`` → dropped call →
-      empty draft. Disabling thinking for that family makes it emit clean
-      structured calls. gemini-3.x parses fine and keeps thinking, so we leave
-      its config alone.
+      empty draft. So for the 2.5 family we constrain thinking:
+        * gemini-2.5-flash / -flash-lite → thinking_budget=0 (fully off).
+        * gemini-2.5-pro → thinking_budget=128 (the minimum; pro REJECTS 0 with
+          HTTP 400 "does not support setting thinking_budget to 0").
+      gemini-3.x parses tool calls fine and keeps its native thinking, so we
+      leave its config alone.
 
     Returns a config safe to attach to any agent regardless of which model the
     environment resolves to.
@@ -102,6 +105,9 @@ def gen_content_config(resolved_model: str):
             ),
         ),
     )
-    if str(resolved_model).startswith("gemini-2.5"):
-        cfg.thinking_config = t.ThinkingConfig(thinking_budget=0)
+    m = str(resolved_model)
+    if m.startswith("gemini-2.5"):
+        # pro can't disable thinking; flash/-lite can.
+        budget = 128 if "pro" in m else 0
+        cfg.thinking_config = t.ThinkingConfig(thinking_budget=budget)
     return cfg

@@ -60,12 +60,21 @@ def test_gen_content_config_always_auto_tool_calls():
         assert cfg.tool_config.function_calling_config.mode.value == "AUTO"
 
 
-def test_gen_content_config_disables_thinking_for_25():
-    # gemini-2.5 leaks <ctrl> tokens / compositional calls with thinking on —
-    # disable it so ADK gets clean structured calls.
-    cfg = gen_content_config("gemini-2.5-flash")
+def test_gen_content_config_disables_thinking_for_25_flash():
+    # gemini-2.5-flash leaks <ctrl> tokens / compositional calls with thinking
+    # on — disable it so ADK gets clean structured calls.
+    for m in ("gemini-2.5-flash", "gemini-2.5-flash-lite"):
+        cfg = gen_content_config(m)
+        assert cfg.thinking_config is not None
+        assert cfg.thinking_config.thinking_budget == 0
+
+
+def test_gen_content_config_pro_uses_min_thinking_budget():
+    # gemini-2.5-pro REJECTS thinking_budget=0 (HTTP 400) — pro can't disable
+    # thinking, so use the minimum valid budget instead of 0.
+    cfg = gen_content_config("gemini-2.5-pro")
     assert cfg.thinking_config is not None
-    assert cfg.thinking_config.thinking_budget == 0
+    assert cfg.thinking_config.thinking_budget == 128
 
 
 def test_gen_content_config_keeps_thinking_for_3x():
