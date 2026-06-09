@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 log = logging.getLogger(__name__)
 
 DEFAULT_LOOKBACK_DAYS = 14
-DEFAULT_MIN_OCCURRENCES = 3
+DEFAULT_MIN_OCCURRENCES = 2  # lowered 3→2 for demo (surface w/ less data)
 DEFAULT_MAX_PROPOSALS = 2
 
 # Human-readable bullets per allowed rewrite kind. Matches the AEO

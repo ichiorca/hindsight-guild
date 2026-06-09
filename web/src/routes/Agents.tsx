@@ -9,11 +9,11 @@
  * lets the founder hand a one-off task to a specific agent instead of
  * running the full team — this page is where you see what each one owns.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ChevronRight, Wrench, BookOpen, Send, Inbox as InboxIcon,
-  History, CheckCircle2, Loader2, ArrowUpRight,
+  History, CheckCircle2, Loader2, ArrowUpRight, Pencil, Check, X, RotateCcw,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
@@ -23,7 +23,10 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { AgentBadge } from "@/components/AgentBadge";
-import { useAgents, useDraft, type AgentRosterEntry } from "@/lib/api";
+import {
+  useAgents, useDraft, useAgentConfig, useSaveAgentSkills,
+  type AgentRosterEntry,
+} from "@/lib/api";
 import { getAgent } from "@/lib/agents";
 import { cn, timeAgo, ICP_LABELS, CHANNELS, channelLabel } from "@/lib/utils";
 import { humanizeActionType, humanizeSkillName, humanizeToolName, humanizeStatus } from "@/lib/humanize";
@@ -31,6 +34,12 @@ import { humanizeActionType, humanizeSkillName, humanizeToolName, humanizeStatus
 export default function AgentsPage() {
   const { data, isLoading, isError, refetch } = useAgents(5);
   const [selected, setSelected] = useState<string | null>(null);
+  // The detail panel renders below the card grid; scroll it into view so a
+  // click on a card lower in the grid clearly *does something*.
+  const detailRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected) detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selected]);
 
   // Sort: agents with non-empty inboxes first (need attention),
   // then everything else alphabetical-ish. Within the "has inbox" group,
@@ -100,7 +109,7 @@ export default function AgentsPage() {
             </div>
 
             {selectedAgent && (
-              <div className="mt-6">
+              <div className="mt-6 scroll-mt-6" ref={detailRef}>
                 <AgentDetail entry={selectedAgent} />
               </div>
             )}
@@ -350,6 +359,126 @@ function AgentCard({
 
 // ---------------------------------------------------------------------------
 
+// Editable per-agent skill loadout. View mode shows the effective allowlist;
+// edit mode lets the founder toggle any catalog skill on/off and star the
+// required ones. Saves to the agent_skill_overrides override (applies on the
+// agent's next restart; the roster reflects it immediately).
+function SkillsEditor({ agentId, fallback }: { agentId: string; fallback: string[] }) {
+  const { data: cfg, isLoading } = useAgentConfig(agentId);
+  const save = useSaveAgentSkills();
+  const [editing, setEditing] = useState(false);
+  const [allowed, setAllowed] = useState<Set<string>>(new Set());
+  const [required, setRequired] = useState<Set<string>>(new Set());
+
+  const current = cfg?.skills_allowed ?? fallback;
+  const currentRequired = cfg?.skills_required ?? [];
+
+  const startEdit = () => {
+    setAllowed(new Set(cfg?.skills_allowed ?? fallback));
+    setRequired(new Set(cfg?.skills_required ?? []));
+    setEditing(true);
+  };
+  const toggleAllowed = (s: string) =>
+    setAllowed((prev) => {
+      const n = new Set(prev);
+      if (n.has(s)) {
+        n.delete(s);
+        setRequired((r) => { const rr = new Set(r); rr.delete(s); return rr; });
+      } else {
+        n.add(s);
+      }
+      return n;
+    });
+  const toggleRequired = (s: string) =>
+    setRequired((prev) => { const n = new Set(prev); if (n.has(s)) n.delete(s); else n.add(s); return n; });
+  const resetDefault = () => {
+    if (!cfg) return;
+    setAllowed(new Set(cfg.defaults.skills_allowed));
+    setRequired(new Set(cfg.defaults.skills_required));
+  };
+  const onSave = () =>
+    save.mutate(
+      { agentId, skills_allowed: [...allowed], skills_required: [...required] },
+      { onSuccess: () => setEditing(false) },
+    );
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+          <BookOpen className="h-3.5 w-3.5" />
+          Knows how to ({editing ? allowed.size : current.length})
+        </p>
+        {!editing ? (
+          <button onClick={startEdit} disabled={isLoading}
+            className="text-[11px] text-primary hover:underline inline-flex items-center gap-1 disabled:opacity-50">
+            <Pencil className="h-3 w-3" /> Edit
+          </button>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <button onClick={resetDefault} title="Reset to code default"
+              className="text-[11px] text-muted-foreground hover:underline inline-flex items-center gap-1">
+              <RotateCcw className="h-3 w-3" /> Default
+            </button>
+            <button onClick={() => setEditing(false)}
+              className="text-[11px] text-muted-foreground hover:underline inline-flex items-center gap-1">
+              <X className="h-3 w-3" /> Cancel
+            </button>
+            <button onClick={onSave} disabled={save.isPending}
+              className="text-[11px] text-success hover:underline inline-flex items-center gap-1 disabled:opacity-50">
+              {save.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+            </button>
+          </div>
+        )}
+      </div>
+
+      {!editing && (
+        <div className="flex flex-wrap gap-1.5">
+          {current.length === 0
+            ? <span className="text-[12px] text-muted-foreground italic">no playbooks assigned</span>
+            : current.map((s) => (
+                <Badge key={s} variant="muted" className="text-[10px]">
+                  {humanizeSkillName(s)}
+                  {currentRequired.includes(s) && <span className="ml-1 text-warning" title="required">★</span>}
+                </Badge>
+              ))}
+        </div>
+      )}
+
+      {editing && cfg && (
+        <>
+          <div className="flex flex-wrap gap-1.5">
+            {cfg.available_skills.map((s) => {
+              const on = allowed.has(s);
+              const req = required.has(s);
+              return (
+                <button key={s} type="button" onClick={() => toggleAllowed(s)}
+                  className={cn(
+                    "text-[10px] rounded-full border px-2 py-0.5 transition-colors",
+                    on
+                      ? "bg-primary/10 border-primary/40 text-foreground"
+                      : "bg-muted/40 border-border text-muted-foreground hover:border-foreground/30",
+                  )}>
+                  {humanizeSkillName(s)}
+                  {on && (
+                    <span role="button" tabIndex={-1}
+                      onClick={(e) => { e.stopPropagation(); toggleRequired(s); }}
+                      className={cn("ml-1", req ? "text-warning" : "opacity-40 hover:opacity-100")}
+                      title={req ? "required — click to make optional" : "click to require (must-read)"}>★</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2 italic">
+            Click to allow/disallow; ★ = required (must-read). Saved changes apply on the agent's next restart.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function AgentDetail({ entry }: { entry: AgentRosterEntry }) {
   const profile = getAgent(entry.agent_id);
 
@@ -373,27 +502,9 @@ function AgentDetail({ entry }: { entry: AgentRosterEntry }) {
             navigating away. Backed by the same /api/draft endpoint as
             the Drafting page; results land in the queue / agent inbox. */}
         <QuickHandoff agent={entry} />
-        {/* Capabilities — skills + tools */}
+        {/* Capabilities — editable skills + read-only (code-wired) tools */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
-              <BookOpen className="h-3.5 w-3.5" />
-              Knows how to ({entry.skills_allowed.length})
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {entry.skills_allowed.length === 0 ? (
-                <span className="text-[12px] text-muted-foreground italic">no playbooks assigned</span>
-              ) : (
-                entry.skills_allowed.map((s) => (
-                  <Link key={s} to="/capabilities" className="hover:no-underline">
-                    <Badge variant="muted" className="text-[10px]">
-                      {humanizeSkillName(s)}
-                    </Badge>
-                  </Link>
-                ))
-              )}
-            </div>
-          </div>
+          <SkillsEditor agentId={entry.agent_id} fallback={entry.skills_allowed} />
           <div>
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
               <Wrench className="h-3.5 w-3.5" />
@@ -410,6 +521,9 @@ function AgentDetail({ entry }: { entry: AgentRosterEntry }) {
                 ))
               )}
             </div>
+            <p className="text-[10px] text-muted-foreground mt-2 italic">
+              Tools are code-wired — not editable from here.
+            </p>
           </div>
         </div>
 

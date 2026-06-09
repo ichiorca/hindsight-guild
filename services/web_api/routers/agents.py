@@ -31,7 +31,8 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from shared import mongo_tools
 from shared.bson_json import jsonable
@@ -73,7 +74,7 @@ def list_agents(inbox_limit: int = 5):
     card needs both static identity (skills/tools) and a live snapshot
     of what's waiting on the founder per agent.
     """
-    from agents._skills_config import SKILLS_BY_AGENT
+    from agents._skills_config import SKILLS_BY_AGENT, allowed_for
 
     # The A2A port map is owned by the drafting router (it routes /api/draft
     # single-agent calls). Import lazily here to keep the agents card aware
@@ -437,14 +438,15 @@ def list_agents(inbox_limit: int = 5):
         return out_rows
 
     out: list[dict] = []
-    for agent_id, skills in SKILLS_BY_AGENT.items():
+    for agent_id in SKILLS_BY_AGENT:
         count, items, label = _inbox_for(agent_id)
         # Decorate each sample item with a human-readable summary + detail
         # so the UI never falls back to opaque ObjectIds for the title.
         decorated = [_summarize_item(agent_id, it) for it in items]
         out.append({
             "agent_id": agent_id,
-            "skills_allowed": skills,
+            # Effective allowlist (founder override merged over code default).
+            "skills_allowed": allowed_for(agent_id),
             "tools": _AGENT_TOOLS.get(agent_id, []),
             "a2a_port": _AGENT_A2A_PORTS.get(agent_id),
             "inbox": {
@@ -456,3 +458,83 @@ def list_agents(inbox_limit: int = 5):
         })
 
     return {"agents": out, "as_of": now.isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# Per-agent config — view + edit the skill loadout from the Agents page.
+# Tools are code-wired (not editable from the UI); skills are an editable
+# allowlist persisted to agent_skill_overrides and merged over the code default.
+# ---------------------------------------------------------------------------
+
+class AgentSkillsUpdate(BaseModel):
+    skills_allowed: list[str]
+    skills_required: list[str] = []
+
+
+@router.get("/api/agents/{agent_id}/config")
+def get_agent_config(agent_id: str) -> dict:
+    """Effective + default skill loadout for an agent, plus the full catalog the
+    editor picks from. Tools are returned read-only (code-wired)."""
+    from agents._skills_config import (
+        REQUIRED_SKILLS_BY_AGENT,
+        SKILLS_BY_AGENT,
+        allowed_for,
+        available_skills,
+        required_for,
+    )
+    if agent_id not in SKILLS_BY_AGENT:
+        raise HTTPException(status_code=404, detail=f"unknown agent {agent_id!r}")
+    return {
+        "agent_id": agent_id,
+        "skills_allowed": allowed_for(agent_id),
+        "skills_required": required_for(agent_id),
+        "defaults": {
+            "skills_allowed": SKILLS_BY_AGENT.get(agent_id, []),
+            "skills_required": REQUIRED_SKILLS_BY_AGENT.get(agent_id, []),
+        },
+        "available_skills": available_skills(),
+        "tools": _AGENT_TOOLS.get(agent_id, []),
+    }
+
+
+@router.put("/api/agents/{agent_id}/skills")
+def set_agent_skills(agent_id: str, body: AgentSkillsUpdate) -> dict:
+    """Persist a founder override for an agent's skill loadout. Takes effect on
+    the agent's next (cold) start; the roster/UI reflect it immediately."""
+    from agents._skills_config import (
+        SKILLS_BY_AGENT,
+        available_skills,
+        invalidate_override_cache,
+    )
+    if agent_id not in SKILLS_BY_AGENT:
+        raise HTTPException(status_code=404, detail=f"unknown agent {agent_id!r}")
+
+    catalog = set(available_skills())
+    unknown = sorted({s for s in (body.skills_allowed + body.skills_required)
+                      if s not in catalog})
+    if unknown:
+        raise HTTPException(status_code=400,
+                            detail=f"unknown skills: {', '.join(unknown)}")
+    if not set(body.skills_required).issubset(set(body.skills_allowed)):
+        raise HTTPException(
+            status_code=400,
+            detail="required skills must all be in the allowed list")
+
+    try:
+        mongo_tools.db()["agent_skill_overrides"].update_one(
+            {"_id": agent_id},
+            {"$set": {
+                "skills_allowed": body.skills_allowed,
+                "skills_required": body.skills_required,
+                "updated_at": datetime.now(UTC),
+            }},
+            upsert=True,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.exception("set_agent_skills(%s) failed", agent_id)
+        raise HTTPException(status_code=502, detail=f"save failed: {e}") from e
+
+    invalidate_override_cache()
+    return {"ok": True, "agent_id": agent_id,
+            "skills_allowed": body.skills_allowed,
+            "skills_required": body.skills_required}

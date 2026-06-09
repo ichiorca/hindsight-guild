@@ -30,8 +30,10 @@ _MIN_NGRAM = 1
 _MAX_NGRAM = 5
 
 # Thresholds per PRD-03 §6.1.
-DEFAULT_MIN_FREQUENCY = 3
-DEFAULT_MIN_DRAFTS = 3
+# Lowered 3→2 so the closed-loop surfaces proposals with less edit history
+# (demo-friendly). A pattern needs to recur across >=2 distinct edited drafts.
+DEFAULT_MIN_FREQUENCY = 2
+DEFAULT_MIN_DRAFTS = 2
 DEFAULT_MAX_PROPOSALS = 5
 
 

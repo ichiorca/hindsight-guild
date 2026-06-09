@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 log = logging.getLogger(__name__)
 
 DEFAULT_LOOKBACK_DAYS = 14
-MIN_SAMPLE = 10
+MIN_SAMPLE = 3  # lowered 10→3 for demo (surface source precision w/ less data)
 PRECISION_LOWER = 0.7
 PRECISION_KILL = 0.1
 SCORE_FLOOR_DELTA = 0.05

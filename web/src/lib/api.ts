@@ -628,6 +628,46 @@ export function integrationForChannel(
   return null;
 }
 
+// ---------------- Agent config (editable skill loadout) ----------------
+
+export interface AgentConfig {
+  agent_id: string;
+  skills_allowed: string[];
+  skills_required: string[];
+  defaults: { skills_allowed: string[]; skills_required: string[] };
+  available_skills: string[];
+  tools: string[];
+}
+
+export function useAgentConfig(agentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["agent-config", agentId],
+    queryFn: () => get<AgentConfig>(`/agents/${agentId}/config`),
+    enabled: !!agentId,
+    staleTime: 30_000,
+  });
+}
+
+export function useSaveAgentSkills() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: { agentId: string; skills_allowed: string[]; skills_required: string[] }) =>
+      post<{ ok: boolean }>(`/agents/${p.agentId}/skills`, {
+        skills_allowed: p.skills_allowed,
+        skills_required: p.skills_required,
+      }),
+    onSuccess: (_d, p) => {
+      qc.invalidateQueries({ queryKey: ["agents"] });
+      qc.invalidateQueries({ queryKey: ["agent-config", p.agentId] });
+      toast.success("Skill loadout saved", {
+        description: "Reflected here now; takes effect on the agent's next (cold) start.",
+      });
+    },
+    onError: (e) =>
+      toast.error("Couldn't save the skill loadout", { description: String((e as Error).message) }),
+  });
+}
+
 // ---------------- Admin · cron control ----------------
 
 // Optional admin token (sent as X-Admin-Token). The cron panel is open until

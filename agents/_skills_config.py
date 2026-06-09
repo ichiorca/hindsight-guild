@@ -18,6 +18,8 @@ requires both copying the SKILL.md and adding the name here.
 """
 from __future__ import annotations
 
+import time
+
 SKILLS_BY_AGENT: dict[str, list[str]] = {
     "research_agent": [
         "house-style",
@@ -108,8 +110,60 @@ SKILLS_BY_AGENT: dict[str, list[str]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Founder overrides — the Agents page can edit an agent's skill loadout. Edits
+# are persisted to the Mongo `agent_skill_overrides` collection and MERGED over
+# the code defaults below. We cache them briefly and fail safe to the code
+# defaults so a Mongo hiccup never strips an agent of its skills, and so local
+# dev / tests without Mongo behave exactly as the static config.
+#
+# NOTE: allowed_for/required_for run at AGENT CONSTRUCTION (a2a_server import),
+# so a saved override takes effect on the next agent (cold) start, not mid-run.
+# The roster endpoint reads these fresh, so the UI reflects edits immediately.
+# ---------------------------------------------------------------------------
+_OVERRIDE_TTL = 30.0
+_override_cache: dict[str, dict] = {}
+_override_ts = 0.0
+
+
+def _overrides() -> dict[str, dict]:
+    global _override_ts, _override_cache
+    now = time.monotonic()
+    if _override_cache and (now - _override_ts) < _OVERRIDE_TTL:
+        return _override_cache
+    try:
+        from shared import mongo_tools
+        rows = mongo_tools.find("agent_skill_overrides", {}, limit=100)
+        _override_cache = {r["_id"]: r for r in rows if r.get("_id")}
+        _override_ts = now
+    except Exception:
+        # Mongo unavailable (local/tests) or any error → defaults win.
+        if not _override_cache:
+            _override_cache = {}
+    return _override_cache
+
+
+def invalidate_override_cache() -> None:
+    """Drop the cache so a just-saved override is reflected immediately."""
+    global _override_ts
+    _override_ts = 0.0
+
+
+def available_skills() -> list[str]:
+    """Every skill assignable to an agent (the union of all defaults) — the
+    catalog the Agents-page skill picker chooses from."""
+    catalog: set[str] = set()
+    for skills in SKILLS_BY_AGENT.values():
+        catalog.update(skills)
+    return sorted(catalog)
+
+
 def allowed_for(agent_name: str) -> list[str]:
-    """Return the allowlist for an agent. Empty list = no skills surfaced."""
+    """Return the allowlist for an agent. Empty list = no skills surfaced.
+    A founder override (agent_skill_overrides) wins over the code default."""
+    ov = _overrides().get(agent_name)
+    if ov and isinstance(ov.get("skills_allowed"), list):
+        return list(ov["skills_allowed"])
     return SKILLS_BY_AGENT.get(agent_name, ["house-style"])
 
 
@@ -143,5 +197,9 @@ REQUIRED_SKILLS_BY_AGENT: dict[str, list[str]] = {
 
 def required_for(agent_name: str) -> list[str]:
     """Return the must-read_skill set for an agent. Empty list = no mandatory
-    invocations (the allowlist is still surfaced at Tier 1)."""
+    invocations (the allowlist is still surfaced at Tier 1). A founder override
+    wins over the code default."""
+    ov = _overrides().get(agent_name)
+    if ov and isinstance(ov.get("skills_required"), list):
+        return list(ov["skills_required"])
     return REQUIRED_SKILLS_BY_AGENT.get(agent_name, ["house-style"])
