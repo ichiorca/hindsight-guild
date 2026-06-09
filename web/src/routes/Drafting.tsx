@@ -48,6 +48,7 @@ export default function DraftingPage() {
   const [icp, setIcp] = useState("seg_merchant_dtc");
   const [channel, setChannel] = useState("linkedin");
   const [topic, setTopic] = useState("");
+  const [subtopics, setSubtopics] = useState("");
   const [visualPref, setVisualPref] = useState("auto");
   const [agentId, setAgentId] = useState<string>(initialAgent);
   const draft = useDraft();
@@ -135,6 +136,9 @@ export default function DraftingPage() {
       icp_segment: icp,
       channel,
       topic_hint: topic,
+      // Split on newlines or commas; trim + drop blanks.
+      subtopics: subtopics
+        .split(/[\n,]+/).map((s) => s.trim()).filter(Boolean),
       visual_pref: visualPref,
       agent_id: agentId === "pipeline" ? undefined : agentId,
     });
@@ -282,6 +286,22 @@ export default function DraftingPage() {
                   />
                 )}
               </div>
+              {(agentId === "pipeline" || agentId === "content_agent") && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Sub-topics (optional)
+                  </label>
+                  <Input
+                    value={subtopics}
+                    onChange={(e) => setSubtopics(e.target.value)}
+                    placeholder="ACP auth handshake, product-feed schema, fallback UX…"
+                    className="mt-1"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Secondary angles to also cover (comma- or newline-separated). The primary topic still drives the headline.
+                  </p>
+                </div>
+              )}
               <Button
                 onClick={submit}
                 disabled={draft.isPending}

@@ -32,6 +32,10 @@ class DraftRequest(BaseModel):
     icp_segment: str
     channel: str  # linkedin | email | blog | substack | lifecycle_email | google_ads | meta_ads | linkedin_ads
     topic_hint: str | None = ""
+    # Optional secondary angles the founder wants the draft to also cover, on
+    # top of the primary topic_hint. Threaded into the agent brief so Research +
+    # Content weave them in — sharpens accuracy without diluting the headline.
+    subtopics: list[str] | None = None
     experiment_id: str | None = None
     # Visualization style for the ImageBrief agent: contextual (image model) |
     # infographic (clean diagram) | excalidraw (hand-drawn diagram) | auto
@@ -430,6 +434,12 @@ def _build_agent_message(req: DraftRequest) -> str:
     icp = req.icp_segment
     topic = req.topic_hint or ""
     exp = req.experiment_id
+    # Secondary angles to weave in. The primary topic still drives the headline;
+    # sub-topics are supporting points so Research pulls the right evidence and
+    # Content covers them without diluting the main thread.
+    subs = [s.strip() for s in (req.subtopics or []) if s and s.strip()]
+    sub_clause = (f" Also cover these sub-topics: {'; '.join(subs)}."
+                  if subs else "")
 
     agent = req.agent_id or "pipeline"
     # ImageBrief (in the pipeline) reads the visualization preference from the
@@ -441,6 +451,7 @@ def _build_agent_message(req: DraftRequest) -> str:
         return (
             f"Draft a {req.channel} post targeting {icp}. "
             f"{('Focus on: ' + topic) if topic else ''}"
+            f"{sub_clause}"
             f"{(' Experiment: ' + exp) if exp else ''}"
             f"{vsuffix}"
         ).strip()

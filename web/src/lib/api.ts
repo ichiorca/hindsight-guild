@@ -757,6 +757,8 @@ export function useDraft() {
       icp_segment: string;
       channel: string;
       topic_hint?: string;
+      // Optional secondary angles to also cover (sharpens content accuracy).
+      subtopics?: string[];
       experiment_id?: string;
       // Optional single-agent handoff. Omitted = full drafting team.
       // See ROUTING_OPTIONS in Drafting.tsx for the supported values.
