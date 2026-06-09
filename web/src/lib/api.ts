@@ -628,6 +628,73 @@ export function integrationForChannel(
   return null;
 }
 
+// ---------------- Admin · cron control ----------------
+
+// Optional admin token (sent as X-Admin-Token). The cron panel is open until
+// ADMIN_SEED_TOKEN is set on the service; once it is, paste the token here and
+// it's persisted to localStorage + attached to admin calls.
+const ADMIN_TOKEN_KEY = "hg_admin_token";
+export function getAdminToken(): string {
+  try { return localStorage.getItem(ADMIN_TOKEN_KEY) ?? ""; } catch { return ""; }
+}
+export function setAdminToken(t: string): void {
+  try { t ? localStorage.setItem(ADMIN_TOKEN_KEY, t) : localStorage.removeItem(ADMIN_TOKEN_KEY); } catch { /* ignore */ }
+}
+function adminHeaders(): Record<string, string> {
+  const t = getAdminToken();
+  return t ? { "X-Admin-Token": t } : {};
+}
+
+export interface Cron {
+  name: string;
+  kind: "job" | "endpoint";
+  schedule: string;
+  description: string;
+  danger: boolean;
+  target?: string;
+}
+export interface CronsResponse {
+  secured: boolean;
+  region: string;
+  crons: Cron[];
+}
+
+export function useCrons() {
+  return useQuery({
+    queryKey: ["admin-crons"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/admin/crons`, { headers: adminHeaders() });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json() as Promise<CronsResponse>;
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useRunCron() {
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const r = await fetch(`${BASE}/admin/crons/${name}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...adminHeaders() },
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error((body as { detail?: string })?.detail || `${r.status} ${r.statusText}`);
+      }
+      return r.json() as Promise<{ ok: boolean; name: string; kind: string; status?: string; result?: unknown }>;
+    },
+    onSuccess: (data) =>
+      toast.success(`Triggered ${data.name}`, {
+        description: data.kind === "job"
+          ? "Job execution started — check Cloud Run / the relevant page for results."
+          : "Ran in-process.",
+      }),
+    onError: (e) =>
+      toast.error("Couldn't trigger that cron", { description: String((e as Error).message) }),
+  });
+}
+
 interface DraftJob {
   job_id: string;
   status: "pending" | "running" | "done" | "failed";

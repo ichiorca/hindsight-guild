@@ -16,7 +16,7 @@
  */
 import {
   Inbox, CalendarCheck, PencilLine, FlaskConical, Layers, Quote, LineChart,
-  Activity, BookOpen, Users, Radar, Brain, Send, type LucideIcon,
+  Activity, BookOpen, Users, Radar, Brain, Send, SlidersHorizontal, type LucideIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -86,6 +86,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/experiments",   label: "Experiments",    icon: FlaskConical,  description: "Hypotheses in flight" },
       // Live ops feed — the right-now ticker for ops + WS-pushed events.
       { to: "/live",          label: "Live Ops",       icon: Activity,      description: "What's running now" },
+      // Admin — manual cron control (trigger any scheduled job/endpoint).
+      { to: "/admin",         label: "Admin",          icon: SlidersHorizontal, description: "Trigger crons manually" },
     ],
   },
 ];

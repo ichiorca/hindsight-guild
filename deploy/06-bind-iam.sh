@@ -43,6 +43,20 @@ bind_job_invoker() {
     --quiet
 }
 
+bind_job_runner() {
+  local job="$1"
+  local member="$2"
+  # run.jobs.run (EXECUTE a job) lives in roles/run.developer, not run.invoker.
+  # Grant it on the job resource so the web-api SA can trigger this job from the
+  # Admin cron panel. Scoped to the job only — narrower than a project grant.
+  gcloud run jobs add-iam-policy-binding "$job" \
+    --region="$REGION" \
+    --member="serviceAccount:${member}" \
+    --role="roles/run.developer" \
+    --project="$PROJECT_ID" \
+    --quiet
+}
+
 bind_secret_accessor() {
   local secret="$1"
   local member="$2"
@@ -70,6 +84,13 @@ echo "==> 3. sa-scheduler → run.invoker on every Cloud Run job"
 for job in "${!JOBS[@]}"; do
   echo "  -> ${job}"
   bind_job_invoker "$job" "$SCHED_SA"
+done
+
+echo "==> 3b. sa-agents → run.developer on every Cloud Run job (Admin cron panel)"
+# Lets web-api trigger jobs on demand from /admin via the Run Admin API.
+for job in "${!JOBS[@]}"; do
+  echo "  -> ${job}"
+  bind_job_runner "$job" "$SA"
 done
 
 echo "==> 4. sa-agents + sa-scheduler → secretAccessor on shared secrets"

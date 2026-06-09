@@ -16,6 +16,7 @@ import Agents from "@/routes/Agents";
 import Signals from "@/routes/Signals";
 import Learning from "@/routes/Learning";
 import Published from "@/routes/Published";
+import Admin from "@/routes/Admin";
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/capabilities"  element={<Capabilities />} />
           <Route path="/agents"        element={<Agents />} />
           <Route path="/live"          element={<Live />} />
+          <Route path="/admin"         element={<Admin />} />
           <Route path="*" element={<Navigate to="/queue" replace />} />
         </Route>
       </Routes>
