@@ -16,7 +16,8 @@ def rubric_trend(days: int = 28):
     if BQ is None:
         return _rubric_trend_from_mongo(days=days)
     sql = f"""
-    SELECT day, channel, mean_brand_voice, mean_claim_support, n
+    SELECT day, channel, mean_brand_voice, mean_claim_support,
+           mean_answer_extractability, n
     FROM `{PROJECT_ID}.analytics.rubric_trend_28d`
     WHERE day >= DATE_SUB(CURRENT_DATE(), INTERVAL {int(days)} DAY)
     ORDER BY day ASC

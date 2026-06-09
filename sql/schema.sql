@@ -86,6 +86,9 @@ SELECT
   channel,
   AVG(CAST(JSON_VALUE(eval_scores, '$.brand_voice') AS FLOAT64))   AS mean_brand_voice,
   AVG(CAST(JSON_VALUE(eval_scores, '$.claim_support') AS FLOAT64)) AS mean_claim_support,
+  -- AEO rubric (PRD-01) — keeps the BQ path field-compatible with the Mongo
+  -- fallback in services/web_api/routers/rubric_trends.py.
+  AVG(CAST(JSON_VALUE(eval_scores, '$.answer_extractability') AS FLOAT64)) AS mean_answer_extractability,
   COUNT(*) AS n
 FROM `${PROJECT_ID}.telemetry.actions`
 WHERE ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
