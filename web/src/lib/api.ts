@@ -4,6 +4,7 @@ import type {
   CapabilitiesData,
   DecisionPayload,
   Experiment,
+  PublishedItem,
   QueueItem,
   RubricTrendPoint,
   Skill,
@@ -567,6 +568,18 @@ export interface PublishedInfo {
   external_id?: number | string;
   title?: string;
   published_at?: string;
+}
+
+// Publish history — everything that reached an external platform, newest
+// first. Backs the /published page. Polls lightly so a fresh publish appears
+// without a manual reload.
+export function usePublishedHistory(channel?: string) {
+  return useQuery({
+    queryKey: ["published-history", channel],
+    queryFn: () =>
+      get<PublishedItem[]>(`/published${channel ? `?channel=${channel}` : ""}`),
+    refetchInterval: 30_000,
+  });
 }
 
 export function usePublished(telemetryId: string | undefined) {

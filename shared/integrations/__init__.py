@@ -3,6 +3,7 @@ founder publishes to.
 
 Currently wired:
   - Dev.to (Forem)   — free, no review; maps to ``blog`` channel
+  - Substack         — newsletter publish via the substack_publisher service
   - LinkedIn UGC     — personal/org share via v2/ugcPosts
   - Google Ads       — paused Responsive Search Ad (RSA) draft
   - Meta Ads         — paused Facebook/Instagram ad creative
@@ -19,14 +20,14 @@ this table rather than maintaining their own switch.
 """
 from __future__ import annotations
 
-from . import devto, google_ads, linkedin, meta_ads
+from . import devto, google_ads, linkedin, meta_ads, substack
 
 # channel slug → (integration_module, human-readable platform name)
 # The platform name is the surface label the UI shows on the Ship-it
 # button and the post-ship "Published → X" chip.
 CHANNEL_ROUTES: dict[str, tuple[object, str]] = {
     "blog": (devto, "Dev.to"),
-    "substack": (devto, "Dev.to"),
+    "substack": (substack, "Substack"),
     "linkedin": (linkedin, "LinkedIn"),
     "google_ads": (google_ads, "Google Ads"),
     "meta_ads": (meta_ads, "Meta Ads"),
@@ -38,7 +39,8 @@ def status_snapshot() -> dict[str, dict[str, object]]:
     for the ``/api/integrations/status`` endpoint.
 
     Built by inverting CHANNEL_ROUTES so each integration lists all the
-    channels it serves (Dev.to handles both ``blog`` and ``substack``).
+    channels it serves (Dev.to handles ``blog``; Substack handles
+    ``substack`` via its own publisher service).
     """
     by_module: dict[str, dict[str, object]] = {}
     for channel, (mod, platform) in CHANNEL_ROUTES.items():

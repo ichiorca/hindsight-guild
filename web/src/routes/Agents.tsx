@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { AgentBadge } from "@/components/AgentBadge";
@@ -28,7 +29,7 @@ import { cn, timeAgo, ICP_LABELS, CHANNELS, channelLabel } from "@/lib/utils";
 import { humanizeActionType, humanizeSkillName, humanizeToolName, humanizeStatus } from "@/lib/humanize";
 
 export default function AgentsPage() {
-  const { data, isLoading } = useAgents(5);
+  const { data, isLoading, isError, refetch } = useAgents(5);
   const [selected, setSelected] = useState<string | null>(null);
 
   // Sort: agents with non-empty inboxes first (need attention),
@@ -61,7 +62,11 @@ export default function AgentsPage() {
           </div>
         )}
 
-        {!isLoading && (
+        {!isLoading && isError && (
+          <ErrorState what="the agent roster" onRetry={() => refetch()} />
+        )}
+
+        {!isLoading && !isError && (
           <>
             {/* At-a-glance band */}
             <div className="flex items-center gap-4 mb-5 text-sm flex-wrap">

@@ -79,7 +79,7 @@ declare -A SCHEDULES=(
   [derive-track-records]="30 3 * * *"     # nightly 03:30 (after eval-harness)
   [drift-detect]="30 4 * * *"             # daily 04:30 (after derive)
   [ops-qa-sweep]="0 5 * * *"              # daily 05:00 (after drift-detect)
-  [self-critique]="0 9 * * MON"           # weekly Monday 09:00
+  [self-critique]="0 0 * * *"             # daily 00:00 UTC — PRD-03 miners (writes self_critique_runs)
   [positioning-review]="0 22 * * SUN"     # Sunday 22:00 (before promotion-gate)
   [promotion-gate]="0 23 * * SUN"         # Sunday 23:00 (final proposal cut)
   [paid-media-sweep]="30 */6 * * *"       # every 6h on the half-hour
@@ -148,7 +148,14 @@ MERMAID_RENDERER_URL="$(gcloud run services describe mermaid-renderer --region="
 # no API key needed). GOOGLE_API_KEY is still mounted (GENAI_SECRETS) but is
 # ignored while USE_VERTEXAI=true, so flipping to the Developer API + gemini-3.x
 # is a one-line change. The Vertex AI Eval service (shared/rubrics.py) runs here.
-GENAI="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},${MODELS}"
+# Inline rubric-scoring sample rate (agents/_common._should_eval). 0.5 = score
+# 1-in-2 drafts at draft time so the founder sees eval scores + reviewer
+# feedback on more drafts (the nightly eval-harness still re-grades the rest).
+# Each scored draft is ~6 extra judge calls, so this trades Vertex Eval quota
+# for coverage; raise toward 1.0 only if quota allows.
+EVAL_SAMPLE_RATE="${EVAL_SAMPLE_RATE:-0.5}"
+
+GENAI="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},EVAL_SAMPLE_RATE=${EVAL_SAMPLE_RATE},${MODELS}"
 
 # Mounted as an env var (Cloud Run --set-secrets) so the Developer-API genai
 # client can authenticate. sa-agents gets secretAccessor via SECRETS_FOR_AGENTS.

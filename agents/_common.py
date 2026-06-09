@@ -154,13 +154,15 @@ def make_after_callback(agent_name: str, skill_id: str, action_type: str,
                 output_text = draft_value
 
             eval_scores = None
+            eval_explanations: dict[str, str] = {}
             if action_type.startswith("draft_") and output_text and _should_eval(state.get("telemetry_id")):
                 try:
-                    scores = score_draft(
+                    scores, eval_explanations = score_draft(
                         candidate=output_text,
                         channel=channel,
                         icp_description=state.get("icp_description"),
                         rubrics=rubrics,
+                        return_explanations=True,
                     )
                     if scores:
                         from shared.rubrics import JUDGE_MODEL
@@ -201,6 +203,12 @@ def make_after_callback(agent_name: str, skill_id: str, action_type: str,
             raw_payload: dict = {}
             if action_type.startswith("draft_") and (output_text or draft_value):
                 raw_payload["draft"] = draft_value or output_text
+                # Per-rubric judge rationale so the Queue UI can show the
+                # founder *why* a rubric scored low (browsable reviewer
+                # feedback), not just the number. Only present when this draft
+                # was sampled for inline scoring (EVAL_SAMPLE_RATE).
+                if eval_explanations:
+                    raw_payload["eval_explanations"] = eval_explanations
                 if state.get("icp_segment"):
                     raw_payload["icp_segment"] = state["icp_segment"]
                 rf = state.get("research_findings")

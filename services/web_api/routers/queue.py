@@ -86,6 +86,10 @@ class QueueItem(BaseModel):
     subject: str | None = None   # email subject / substack headline, if any
     draft_text: str
     eval_scores: dict[str, float]
+    # Per-rubric judge rationale ({rubric: explanation}). Lets the Queue card
+    # show the founder WHY a rubric scored low, so "Needs work · 20%" is
+    # actionable. Present only on inline-scored drafts (EVAL_SAMPLE_RATE).
+    eval_explanations: dict[str, str] | None = None
     review_flags: list[dict[str, Any]]
     customer_voice_used: list[str]
     icp_segment: str | None
@@ -185,6 +189,7 @@ def get_queue(channel: str | None = None, limit: int = 50):
             subject=subject_from_draft(draft_blob),
             draft_text=strip_visual_artifacts(draft_text),
             eval_scores=_numeric_scores(r.eval_scores),
+            eval_explanations=raw.get("eval_explanations") or None,
             review_flags=raw.get("review_flags") or [],
             customer_voice_used=raw.get("customer_voice_used") or [],
             icp_segment=raw.get("icp_segment"),
@@ -263,6 +268,7 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
             subject=subject_from_draft(draft_blob),
             draft_text=strip_visual_artifacts(draft_text or ""),
             eval_scores=_numeric_scores(r.get("eval_scores")),
+            eval_explanations=raw.get("eval_explanations") or None,
             review_flags=raw.get("review_flags") or [],
             customer_voice_used=raw.get("customer_voice_used") or [],
             icp_segment=raw.get("icp_segment"),
@@ -296,24 +302,46 @@ class Decision(BaseModel):
 
 @router.post("/api/decisions")
 def submit_decision(d: Decision):
-    """Forwards to the edit_capture_handler so the learning loop fires
-    identically whether decisions come from the Sheet or the UI.
+    """Record a founder decision, then (on approve) publish to the channel's
+    platform.
 
-    In LOCAL_DEV (no Cloud Run handler), writes the approval row directly
-    to Mongo so the UI updates immediately and the founder's decision is
-    durable. The cloud handler does extra work — classifying edits as
-    tone-vs-fact-vs-cta, inserting into ``negative_examples`` on reject —
-    but the core write (an ``approvals`` row + queue refresh) happens
-    locally too, so the UI flow isn't broken without GCP creds.
+    Recording runs through the edit_capture_handler in prod (it classifies
+    edits tone/fact/cta, captures training.edits, and writes the approvals
+    row) and falls back to a durable Mongo write in LOCAL_DEV / if that
+    handler is down — so a decision is never lost.
+
+    Publishing is owned HERE, for EVERY channel, regardless of which record
+    path ran. Previously the handler path early-returned BEFORE publishing, so
+    in prod nothing but Substack ever shipped — blog/Dev.to, LinkedIn, and
+    ads silently never published.
     """
+    now = datetime.now(UTC)
+    actor_id = d.decided_by or "founder"
+    resp = _record_decision(d, now, actor_id)
+
+    # On approve, dispatch to whichever platform owns this channel (Dev.to →
+    # blog, Substack → substack, LinkedIn → linkedin, Google/Meta Ads → paid).
+    # Non-fatal: the approval row is already saved; _try_publish_for_channel
+    # records publish_state on the approval so the UI surfaces progress +
+    # failures. attribution_map is the canonical "what URL did this end at".
+    if d.decision == "approve" and (d.approved_text or "").strip():
+        publish_result = _try_publish_for_channel(d, actor_id, now)
+        if publish_result:
+            resp["publish"] = publish_result
+    return resp
+
+
+def _record_decision(d: Decision, now: datetime, actor_id: str) -> dict:
+    """Persist the decision for the learning loop — handler in prod, durable
+    Mongo write otherwise. Does NOT publish (the caller owns publishing so
+    every channel ships from one place)."""
     from services.web_api.main import _secret_optional
     url = _secret_optional("edit_capture_handler_url")
     if url:
-        # The handler does EXTRA work (classifying edits tone/fact/cta), but a
-        # founder's approve/reject must NEVER fail just because that secondary
-        # service is unavailable. On any handler error, fall through to the
-        # durable Mongo write below (which also captures negative_examples on
-        # reject + publishes on approve) so the decision still lands.
+        # The handler does EXTRA work (edit classification, training.edits,
+        # the approvals write). A founder's approve/reject must NEVER fail
+        # just because that secondary service is down — on any error, fall
+        # through to the durable Mongo write so the decision still lands.
         try:
             r = httpx.post(f"{url}/handle", json=d.model_dump(), timeout=20)
             r.raise_for_status()
@@ -333,9 +361,6 @@ def submit_decision(d: Decision):
         insert_with_provenance,
         update_with_history,
     )
-
-    now = datetime.now(UTC)
-    actor_id = d.decided_by or "founder"
 
     record = {
         "telemetry_id": d.telemetry_id,
@@ -390,23 +415,66 @@ def submit_decision(d: Decision):
             "ts": now,
         }, actor_id=actor_id, change_kind="reject_capture")
 
-    # On approve, dispatch the draft to whichever external platform
-    # owns this channel (Dev.to → blog/substack, LinkedIn → linkedin,
-    # Google Ads / Meta Ads → their respective paid channels). Failure
-    # is non-fatal: the approval row is already saved; we just record
-    # the publish-failed state so the UI can surface it.
-    # ``attribution_map`` is the canonical store for "what external
-    # URL/ID did this draft end up at" across all channels.
-    publish_result: dict | None = None
-    if d.decision == "approve" and (d.approved_text or "").strip():
-        publish_result = _try_publish_for_channel(d, actor_id, now)
-
-    log.info("decision %s recorded for %s (LOCAL_DEV path)",
+    log.info("decision %s recorded for %s (durable Mongo path)",
              d.decision, d.telemetry_id)
-    resp = {"ok": True, "mode": "local"}
-    if publish_result:
-        resp["publish"] = publish_result
-    return resp
+    return {"ok": True, "mode": "local"}
+
+
+class PublishedRecord(BaseModel):
+    telemetry_id: str
+    channel: str | None = None
+    platform: str | None = None
+    title: str | None = None
+    external_url: str | None = None
+    external_id: str | None = None
+    published_at: datetime | None = None
+    publish_mode: str | None = None    # api | manual_review
+    publish_state: str | None = None   # published | manual_review | failed
+
+
+@router.get("/api/published", response_model=list[PublishedRecord])
+def list_published(limit: int = 100, channel: str | None = None):
+    """Publish history — every draft that reached an external platform, newest
+    first. Sourced from ``attribution_map`` (the canonical external-handle
+    store), enriched with publish_mode/state from ``approvals``. Handles both
+    the generic shape (external_url/external_id/platform, written by web-api
+    for Dev.to / LinkedIn / ads) and the Substack publisher's shape
+    (substack_url/substack_post_id)."""
+    db = mongo_tools.db()
+    q: dict[str, Any] = {"published_at": {"$exists": True}}
+    if channel:
+        q["channel"] = channel
+    try:
+        rows = list(db["attribution_map"].find(q)
+                    .sort("published_at", -1).limit(limit))
+    except Exception as e:
+        log.warning("published history query failed: %s", e)
+        return []
+
+    appr = {a["telemetry_id"]: a for a in mongo_tools.find(
+        "approvals", {}, limit=1000)}
+
+    out: list[PublishedRecord] = []
+    for r in rows:
+        tid = r.get("telemetry_id") or ""
+        a = appr.get(tid, {})
+        url = r.get("external_url") or r.get("substack_url") or a.get("external_url")
+        ext_id = r.get("external_id") or r.get("substack_post_id")
+        is_substack = bool(r.get("substack_url") or r.get("substack_post_id")) \
+            or (r.get("channel") == "substack")
+        platform = r.get("platform") or ("Substack" if is_substack else None)
+        out.append(PublishedRecord(
+            telemetry_id=tid,
+            channel=r.get("channel"),
+            platform=platform,
+            title=(r.get("title") or None),
+            external_url=(url or None),
+            external_id=(str(ext_id) if ext_id else None),
+            published_at=r.get("published_at"),
+            publish_mode=r.get("publish_mode") or a.get("publish_mode"),
+            publish_state=a.get("publish_state"),
+        ))
+    return out
 
 
 @router.get("/api/published/{telemetry_id}")
@@ -474,9 +542,18 @@ def _try_publish_for_channel(d: Decision, actor_id: str, now: datetime) -> dict:
     if isinstance(raw, dict):
         topic_hint = raw.get("topic_hint") or ""
 
+    # Reflect "Publishing…" on the approval immediately so the Queue badge
+    # spins until we resolve it below. Substack is async — its publisher
+    # service owns the publish_state writes, so we don't touch it here.
+    if channel != "substack":
+        _set_publish_state(d.telemetry_id, {"publish_state": "publishing",
+                                            "publish_started_at": now})
+
     try:
-        if channel in ("blog", "substack"):
+        if channel == "blog":
             result = _publish_devto(d, icp_segment, topic_hint)
+        elif channel == "substack":
+            result = _publish_substack(d)
         elif channel == "linkedin":
             result = _publish_linkedin(d)
         elif channel == "google_ads":
@@ -486,9 +563,17 @@ def _try_publish_for_channel(d: Decision, actor_id: str, now: datetime) -> dict:
         else:
             return {"status": "no_route", "channel": channel}
     except _PublishSkipped as e:
+        # Not a failure (e.g. creds unset) — clear the spinner so the row
+        # isn't stuck "Publishing…". Substack's manual_review is handled by
+        # its own publisher service.
+        if channel != "substack":
+            _set_publish_state(d.telemetry_id, {"publish_state": None})
         return {"status": "skipped", "platform": e.platform, "reason": e.reason}
     except _PublishFailed as e:
         log.warning("%s publish failed for %s: %s", e.platform, d.telemetry_id, e.reason)
+        if channel != "substack":
+            _set_publish_state(d.telemetry_id, {"publish_state": "failed",
+                                                "publish_error": e.reason[:200]})
         return {"status": "failed", "platform": e.platform, "error": e.reason[:200]}
 
     # Persist the external handle in attribution_map. ``external_url``
@@ -512,7 +597,32 @@ def _try_publish_for_channel(d: Decision, actor_id: str, now: datetime) -> dict:
     except Exception as e:
         log.warning("attribution_map write failed: %s", e)
 
+    # Mark the approval published so the Queue badge flips to "Published" and
+    # the item leaves the pending queue. Substack's publisher writes its own
+    # publish_state (api vs manual_review), so skip it here.
+    if channel != "substack":
+        _set_publish_state(d.telemetry_id, {
+            "publish_state": "published",
+            "publish_mode": "api",
+            "external_url": result.get("url", ""),
+            "external_id": str(result.get("external_id", "")),
+            "publish_completed_at": now,
+        })
+
     return {"status": "published", **result}
+
+
+def _set_publish_state(telemetry_id: str, fields: dict) -> None:
+    """Best-effort update of the approval row's publish_* fields so the Queue
+    badge reflects publish progress (publishing → published/failed) and the
+    Published history can list it. Never raises — publishing is non-fatal to
+    the decision that already landed."""
+    try:
+        mongo_tools.db()["approvals"].update_one(
+            {"telemetry_id": telemetry_id}, {"$set": fields}, upsert=True,
+        )
+    except Exception as e:
+        log.warning("publish_state write failed for %s: %s", telemetry_id, e)
 
 
 class _PublishSkipped(Exception):
@@ -570,6 +680,52 @@ def _publish_devto(d: Decision, icp_segment: str, topic_hint: str) -> dict:
         "url": article.url,
         "external_id": article.id,
         "title": article.title,
+    }
+
+
+def _publish_substack(d: Decision) -> dict:
+    """Publish an approved Substack draft via the dedicated substack_publisher
+    Cloud Run service.
+
+    Substack does NOT go to Dev.to. The publisher service owns the BigQuery
+    draft read, idempotency, the Substack REST calls, and its own
+    attribution/approval bookkeeping — we just hand it the telemetry_id and
+    surface the outcome. When the publisher URL isn't configured (or the call
+    times out), the 15-min ``substack_publish_sweep`` cron retries, so we
+    skip rather than hard-fail in those cases.
+    """
+    from services.web_api.main import _secret_optional
+
+    url = _secret_optional("substack_publisher_url")
+    if not url:
+        raise _PublishSkipped("substack", "substack_publisher_url not set "
+                              "(substack_publish_sweep cron will retry)")
+    try:
+        r = httpx.post(f"{url.rstrip('/')}/publish",
+                       json={"telemetry_id": d.telemetry_id}, timeout=60)
+        r.raise_for_status()
+        ctype = r.headers.get("content-type", "")
+        body = r.json() if ctype.startswith("application/json") else {}
+    except httpx.TimeoutException:
+        # Idempotent + sweep-retried: don't scare the founder with "failed".
+        raise _PublishSkipped("substack",
+                              "publish in progress; sweep will confirm") from None
+    except httpx.HTTPError as e:
+        raise _PublishFailed("substack", str(e)) from e
+
+    # mode="api" is a real publish; "manual_review" means Substack creds were
+    # absent / the API rejected us and the draft was staged for the founder to
+    # publish by hand (not an actual publish).
+    if body.get("mode") == "manual_review":
+        raise _PublishSkipped(
+            "substack",
+            body.get("reason") or "staged for manual publish (Substack API unavailable)",
+        )
+    return {
+        "platform": "substack",
+        "url": body.get("url") or "",
+        "external_id": str(body.get("post_id") or ""),
+        "title": "",
     }
 
 

@@ -218,6 +218,14 @@ Process:
      describe a placeholder for, or attempt to render any visual.
    - You may reference a concept in prose, but never render the picture
      yourself — leave all visuals to ImageBrief.
+5. CLOSE WITH EXACTLY ONE CTA — REQUIRED, not optional. Every draft MUST end
+   with a single, soft, channel-appropriate call-to-action: a question, a
+   self-check, or one concrete next step. A draft that has NO CTA, a hard sell,
+   an off-channel CTA (e.g. "book a demo" under a LinkedIn thought-leadership
+   post), or 2+ competing CTAs scores at the FLOOR on the conversion_intent
+   rubric and gets held. Match the funnel stage — top-of-funnel invites a
+   reply or a reflection, it does not say "buy now". One CTA. Soft. On-channel.
+   (For Substack, the CTA is the final paragraph of body_markdown.)
 
 Channel-specific output shape:
   - '{Channel.LINKEDIN}' / '{Channel.EMAIL}' / '{Channel.BLOG}': return
@@ -1041,9 +1049,14 @@ What to evaluate:
    founder keep reading on their phone in a coffee line? Or does it
    open with "In today's rapidly evolving landscape, ..."?
 
-6. **CTA / takeaway**. Does the ending give the reader something
-   concrete (a question, a self-check, a next step)? Or does it
-   fizzle into "embrace the future"?
+6. **CTA / takeaway (REQUIRED)**. The draft MUST end with exactly ONE
+   soft, channel-appropriate CTA — a question, a self-check, or one
+   concrete next step. If the ending has NO CTA, a hard sell, an
+   off-channel CTA, or 2+ competing CTAs, set severity at least "medium"
+   and ADD a ``specific_revisions`` item giving the exact one-line CTA to
+   use (matched to channel + funnel stage). "Embrace the future" is not a
+   CTA. This is the #1 recurring miss — drafts keep scoring at the floor on
+   conversion_intent because they trail off without a clear ask.
 
 7. **Length + structure**. Substack 1100–1800 words; LinkedIn under
    1300 chars; Email under 300 words; Blog outline ≥ 4 H2 sections.

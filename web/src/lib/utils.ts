@@ -70,10 +70,10 @@ export const CHANNELS: Array<{
   description: string;
   group?: "organic" | "lifecycle" | "paid";
 }> = [
-  { id: "linkedin",      label: "LinkedIn post",       description: "Long-form feed post — 1300 char ceiling",       group: "organic" },
-  { id: "blog",          label: "Blog outline",        description: "Structured outline for a long-form post",       group: "organic" },
-  { id: "substack",      label: "Substack newsletter", description: "Headline + subtitle + markdown body",           group: "organic" },
-  { id: "email",         label: "One-off email",       description: "Single mid-funnel campaign send",               group: "organic" },
+  { id: "linkedin",      label: "LinkedIn post → LinkedIn",       description: "Long-form feed post — 1300 char ceiling. Publishes to LinkedIn on approval.",       group: "organic" },
+  { id: "blog",          label: "Blog outline → Dev.to",          description: "Structured long-form post. Publishes to Dev.to on approval.",                       group: "organic" },
+  { id: "substack",      label: "Substack newsletter → Substack", description: "Headline + subtitle + markdown body. Publishes to Substack on approval.",            group: "organic" },
+  { id: "email",         label: "One-off email",                  description: "Single mid-funnel campaign send (drafted, not auto-published)",                      group: "organic" },
   { id: "lifecycle_email", label: "Nurture sequence",  description: "3–5 step lifecycle email sequence (drafted, never auto-sent)", group: "lifecycle" },
   { id: "google_ads",    label: "Google Ads (RSA)",    description: "3x30-char headlines + 90-char descriptions, paused on insert", group: "paid" },
   { id: "meta_ads",      label: "Meta Ads",            description: "40-char headline + 125-char primary text, paused on insert",   group: "paid" },

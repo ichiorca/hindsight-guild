@@ -20,6 +20,9 @@ export interface QueueItem {
   subject?: string | null;
   draft_text: string;
   eval_scores: EvalScores;
+  // Per-rubric judge rationale — present only on inline-scored drafts. Lets the
+  // queue card show WHY a rubric scored low (browsable reviewer feedback).
+  eval_explanations?: Record<string, string> | null;
   review_flags: ReviewFlag[];
   customer_voice_used: string[];
   icp_segment: string | null;
@@ -52,6 +55,19 @@ export interface EvalScores {
 export interface ReviewFlag {
   phrase: string;
   issue: string;
+}
+
+// One row of publish history (GET /api/published). Sourced from attribution_map.
+export interface PublishedItem {
+  telemetry_id: string;
+  channel?: string | null;
+  platform?: string | null;       // "Dev.to" | "Substack" | "LinkedIn" | ...
+  title?: string | null;
+  external_url?: string | null;
+  external_id?: string | null;
+  published_at?: string | null;
+  publish_mode?: "api" | "manual_review" | null;
+  publish_state?: PublishState | null;
 }
 
 export type Decision = "approve" | "edit" | "reject";

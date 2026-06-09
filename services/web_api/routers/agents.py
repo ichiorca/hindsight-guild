@@ -34,6 +34,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter
 
 from shared import mongo_tools
+from shared.bson_json import jsonable
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -84,15 +85,17 @@ def list_agents(inbox_limit: int = 5):
     week_ago = now - timedelta(days=7)
 
     def _strip_ids(rows: list[dict]) -> list[dict]:
-        # Mongo ObjectIds aren't JSON-serializable in the FastAPI path.
-        # The /skills, /experiments etc. paths use queries.py helpers that
-        # don't return raw ObjectId fields; raw .find() returns can.
+        # Mongo docs carry raw BSON FastAPI's encoder can't serialize — not
+        # just the top-level ``_id`` but nested ObjectIds (e.g.
+        # ``customer_voice.signal_id`` on signal-triggered ingests), datetimes,
+        # Decimal128. A top-level-_id-only strip 500s the customer_voice inbox
+        # with "'ObjectId' object is not iterable". Recursively coerce via the
+        # shared sanitizer; drop the 1024-float embedding the inbox never renders.
         out = []
         for r in rows or []:
             r = dict(r)
-            if "_id" in r and not isinstance(r["_id"], str):
-                r["_id"] = str(r["_id"])
-            out.append(r)
+            r.pop("embedding", None)
+            out.append(jsonable(r))
         return out
 
     def _summarize_item(agent_id: str, item: dict) -> dict:

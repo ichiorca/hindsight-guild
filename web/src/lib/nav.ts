@@ -16,7 +16,7 @@
  */
 import {
   Inbox, CalendarCheck, PencilLine, FlaskConical, Layers, Quote, LineChart,
-  Activity, BookOpen, Users, Radar, Brain, type LucideIcon,
+  Activity, BookOpen, Users, Radar, Brain, Send, type LucideIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -48,6 +48,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/draft",         label: "Drafting",       icon: PencilLine,    description: "Run the pipeline" },
       // Signals — auto-triggers that land in the queue with a Triggered-by chip.
       { to: "/signals",       label: "Signals",        icon: Radar,         description: "Inbound triggers" },
+      // Published — the durable record of what actually shipped externally.
+      { to: "/published",     label: "Published",      icon: Send,          description: "What shipped + where" },
       // Monday ritual — the slowest cadence, so last. Carries the
       // pending-proposals badge so the founder sees decision work
       // waiting without opening the page.

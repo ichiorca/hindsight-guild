@@ -246,10 +246,16 @@ def _recent_negatives(channel: str, category: str, limit: int = 3) -> str:
 
 def score_draft(candidate: str, channel: str | None = None,
                  icp_description: str | None = None,
-                 rubrics: list[RubricDef] | None = None) -> dict[str, float]:
+                 rubrics: list[RubricDef] | None = None,
+                 return_explanations: bool = False):
     """Synchronous single-draft eval. Used at draft time by the agent callback.
 
-    Returns {rubric_name: score 0..1}.
+    Returns ``{rubric_name: score 0..1}`` by default. When
+    ``return_explanations=True`` returns ``(scores, explanations)`` where
+    ``explanations`` is ``{rubric_name: judge_rationale_str}`` — the judge's
+    written justification per rubric, so the founder can SEE *why* a draft
+    scored low instead of just a number. (Vertex writes these into
+    ``metrics_table`` as ``<metric>/explanation`` columns alongside the score.)
     """
     rubrics = rubrics or ALL_RUBRICS
 
@@ -291,8 +297,10 @@ def score_draft(candidate: str, channel: str | None = None,
     result = task.evaluate()
 
     scores: dict[str, float] = {}
+    explanations: dict[str, str] = {}
     # Vertex AI Eval Service writes per-row scores into result.metrics_table
-    # under columns named `<metric_name>/score` (raw 1-5 int).
+    # under columns named `<metric_name>/score` (raw 1-5 int) and the judge's
+    # rationale under `<metric_name>/explanation`.
     table = result.metrics_table
     for r in rubrics:
         col = f"{r.name}/score"
@@ -302,6 +310,16 @@ def score_draft(candidate: str, channel: str | None = None,
                 scores[r.name] = raw / 5.0  # normalize 1-5 → 0..1
             except (ValueError, TypeError):
                 log.warning("rubric %s returned non-numeric score", r.name)
+        exp_col = f"{r.name}/explanation"
+        if exp_col in table.columns:
+            try:
+                val = table.iloc[0][exp_col]
+                if isinstance(val, str) and val.strip():
+                    explanations[r.name] = val.strip()
+            except (ValueError, TypeError, KeyError):
+                pass
+    if return_explanations:
+        return scores, explanations
     return scores
 
 

@@ -207,17 +207,16 @@ def handle():
             },
         )
 
-    # Trigger downstream publish on approve for channels that have a
-    # publisher service. Fire-and-forget — the sweep job retries any that
-    # fail. We deliberately don't block the founder's UI on the publish API.
-    publish_result: dict = {}
-    if decision in ("approve", "edit") and p.get("channel") == "substack":
-        publish_result = _trigger_substack_publish(tid)
-
+    # NOTE: Publishing is owned by web-api's /api/decisions for EVERY channel
+    # (Dev.to/blog, Substack, LinkedIn, ads) — it calls _try_publish_for_channel
+    # after this handler returns. This handler used to also trigger Substack
+    # here, which (now that web-api publishes Substack too) would double-fire
+    # the publisher. The publisher is idempotent, but we drop the trigger to
+    # keep a single publish owner. The 15-min substack_publish_sweep cron is
+    # still the safety net for anything that slips through.
     return jsonify({
         "ok": True,
         "classification": classification,
-        "publish": publish_result,
     }), 200
 
 

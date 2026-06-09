@@ -19,6 +19,18 @@ const VERDICT_RUBRICS: ReadonlyArray<keyof EvalScores> = [
   "icp_relevance", "originality", "conversion_intent",
 ];
 
+// Short labels so the badge can name the rubric that's dragging the verdict
+// down — "Needs work · Intent 20%" is actionable; "Needs work · 20%" is not.
+const RUBRIC_LABELS: Record<string, string> = {
+  brand_voice: "Voice",
+  claim_support: "Support",
+  claim_risk: "Risk",
+  icp_relevance: "ICP",
+  originality: "Originality",
+  conversion_intent: "Intent",
+  answer_extractability: "AI-citable",
+};
+
 export function computeVerdict(scores: EvalScores | undefined | null): Verdict {
   if (!scores) return "unknown";
   const values = VERDICT_RUBRICS
@@ -29,6 +41,23 @@ export function computeVerdict(scores: EvalScores | undefined | null): Verdict {
   if (min >= 0.80) return "ship_ready";
   if (min >= 0.65) return "polish_needed";
   return "needs_work";
+}
+
+// The single worst scoring rubric (the one driving the verdict). Returns its
+// short label + score so the badge can point the founder straight at it.
+export function weakestRubric(
+  scores: EvalScores | undefined | null,
+): { key: string; label: string; score: number } | null {
+  if (!scores) return null;
+  let worst: { key: string; label: string; score: number } | null = null;
+  for (const k of VERDICT_RUBRICS) {
+    const v = scores[k];
+    if (typeof v !== "number") continue;
+    if (!worst || v < worst.score) {
+      worst = { key: k, label: RUBRIC_LABELS[k] ?? k, score: v };
+    }
+  }
+  return worst;
 }
 
 const VERDICT_META = {
@@ -69,19 +98,29 @@ export function ShipReadiness({ scores, size = "md" }: {
   const verdict = computeVerdict(scores);
   const meta = VERDICT_META[verdict];
   const Icon = meta.icon;
+  const weak = weakestRubric(scores);
 
   const sizeClass = size === "sm"
     ? "px-2 py-0.5 text-[11px] gap-1"
     : "px-3 py-1 text-xs gap-1.5";
 
+  // Name the rubric driving a sub-ship verdict so the badge is actionable.
+  // Ship-ready needs no rubric callout (everything cleared the bar).
+  const showWeak = weak && verdict !== "unknown" && verdict !== "ship_ready";
+
   return (
     <span
       className={cn("inline-flex items-center font-medium rounded-full", sizeClass, meta.className)}
-      title={meta.description}
+      title={showWeak
+        ? `${meta.description}. Lowest: ${weak.label} ${pct(weak.score)}.`
+        : meta.description}
     >
       <Icon className={size === "sm" ? "h-3 w-3" : "h-3.5 w-3.5"} />
       {meta.label}
-      {scores && verdict !== "unknown" && (
+      {showWeak && (
+        <span className="font-mono opacity-70">· {weak.label} {pct(weak.score)}</span>
+      )}
+      {!showWeak && scores && verdict === "ship_ready" && (
         <span className="font-mono opacity-70">· {pct(Math.min(...Object.values(scores).filter((v): v is number => typeof v === "number")))}</span>
       )}
     </span>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2, Pencil, X, Inbox, Linkedin, Mail, FileText,
   Clock, AlertCircle, FlaskConical, Search as SearchIcon,
-  Send, MousePointerClick, Megaphone,
+  Send, MousePointerClick, Megaphone, Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -453,7 +453,7 @@ function QueueRow({ item, focused, armed, onFocus }: {
               </p>
               <SearchIcon className="h-3 w-3 text-muted-foreground" />
             </div>
-            <RubricScores scores={item.eval_scores} />
+            <RubricScores scores={item.eval_scores} explanations={item.eval_explanations} />
           </div>
         )}
 
@@ -499,9 +499,11 @@ function QueueRow({ item, focused, armed, onFocus }: {
         {mode === "view" && (
           <>
             <Button variant="success" size="sm" onClick={ship} disabled={submit.isPending}>
-              <CheckCircle2 className="h-4 w-4" />
-              {shipVerb}
-              {armed && <Kbd keys={["A"]} className="ml-1 opacity-70" />}
+              {submit.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <CheckCircle2 className="h-4 w-4" />}
+              {submit.isPending ? "Publishing…" : shipVerb}
+              {armed && !submit.isPending && <Kbd keys={["A"]} className="ml-1 opacity-70" />}
             </Button>
             {willPublishHint && (
               <span className="text-[11px] text-muted-foreground">
@@ -529,7 +531,9 @@ function QueueRow({ item, focused, armed, onFocus }: {
                 : `Publish to ${route?.platform} now? This posts publicly.`}
             </span>
             <Button variant="success" size="sm" onClick={approve} disabled={submit.isPending}>
-              <CheckCircle2 className="h-4 w-4" /> Confirm
+              {submit.isPending
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Publishing…</>
+                : <><CheckCircle2 className="h-4 w-4" /> Confirm</>}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setMode("view")}>
               Cancel
@@ -539,7 +543,9 @@ function QueueRow({ item, focused, armed, onFocus }: {
         {mode === "edit" && (
           <>
             <Button variant="success" size="sm" onClick={saveEdit} disabled={submit.isPending}>
-              <CheckCircle2 className="h-4 w-4" /> Save & ship
+              {submit.isPending
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Publishing…</>
+                : <><CheckCircle2 className="h-4 w-4" /> Save & ship</>}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => { setMode("view"); setEditedText(item.draft_text); }}>
               Cancel
