@@ -28,6 +28,7 @@ import logging
 from google.adk.tools import FunctionTool
 
 from shared import mongo_tools
+from shared.bson_json import jsonable
 
 log = logging.getLogger(__name__)
 
@@ -131,16 +132,17 @@ def _regex_or(tokens: list[str]) -> str:
 
 def _result(approved: list[dict], voice: list[dict],
             verdict: str, summary: str) -> dict:
-    """Build the return dict with stringified _ids (Mongo ObjectIds
-    aren't JSON-serializable when ADK passes results back to the LLM)."""
-    def _clean(d: dict) -> dict:
-        out = dict(d)
-        if "_id" in out:
-            out["_id"] = str(out["_id"])
-        return out
+    """Build the return dict, fully BSON→JSON sanitized.
+
+    customer_voice rows carry ``signal_id`` (an ObjectId) and timestamps, not
+    just ``_id`` — so a top-level-``_id``-only clean leaks ObjectIds into the
+    LLM history and ADK's request serializer dies with
+    ``PydanticSerializationError`` (empty draft). Use the shared recursive
+    ``jsonable`` so every nested/non-_id BSON value is coerced.
+    """
     return {
-        "approved": [_clean(d) for d in approved],
-        "voice": [_clean(d) for d in voice],
+        "approved": [jsonable(d) for d in approved],
+        "voice": [jsonable(d) for d in voice],
         "verdict": verdict,
         "summary": summary,
     }

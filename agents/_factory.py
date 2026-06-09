@@ -28,6 +28,7 @@ from agents._common import (
     make_after_callback,
     make_model_armor_callback,
     make_tool_name_repair_callback,
+    make_tool_result_sanitizer_callback,
 )
 from agents._mcp import mongodb_toolset
 from agents._models import gen_content_config, pick_model
@@ -103,6 +104,9 @@ def make_llm_agent(
             make_tool_name_repair_callback(),
             make_model_armor_callback(),
         ),
+        # Defensive BSON→JSON backstop so no tool result can leak an ObjectId
+        # into the LLM history and kill the run (empty draft). See callback doc.
+        after_tool_callback=make_tool_result_sanitizer_callback(),
         after_agent_callback=make_after_callback(
             agent_name=name,
             skill_id=skill_id,

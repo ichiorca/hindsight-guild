@@ -361,6 +361,37 @@ def make_tool_name_repair_callback() -> Callable:
     return callback
 
 
+def make_tool_result_sanitizer_callback() -> Callable:
+    """after_tool_callback that BSON→JSON-sanitizes every tool result before it
+    becomes a function_response in the LLM history.
+
+    This is the defensive backstop for the ObjectId-serialization class of bug:
+    even if some tool returns a raw ObjectId/datetime/Decimal128 deep inside a
+    document, this strips it here so ADK's request serializer
+    (``google_llm._build_request_log`` / the next model call) can't blow up the
+    run with ``PydanticSerializationError`` (which surfaces as an empty draft).
+    Source-layer sanitizers (``_mongodb_tools``, ``_evidence_tool``) still run;
+    this guarantees coverage for any tool that forgets to.
+
+    Returns a new dict only when a coercion was actually needed (so it's a
+    no-op for the common all-JSON-clean case).
+    """
+    from shared.bson_json import jsonable
+
+    def callback(tool, args, tool_context, tool_response):  # type: ignore[no-untyped-def]
+        try:
+            if isinstance(tool_response, dict):
+                cleaned = jsonable(tool_response)
+                if cleaned != tool_response:
+                    return cleaned
+        except Exception as e:  # noqa: BLE001 — never break a run on sanitize
+            log.warning("tool-result sanitizer failed for %s: %s",
+                        getattr(tool, "name", tool), e)
+        return None
+
+    return callback
+
+
 def chain_after_model_callbacks(*callbacks: Callable) -> Callable:
     """Compose several after_model_callbacks into one. Each runs in order on the
     (possibly already-modified) response; the last non-None return wins as the

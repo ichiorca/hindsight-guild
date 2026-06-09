@@ -25,7 +25,11 @@ from dataclasses import dataclass
 
 from google.adk.agents import LlmAgent
 
-from agents._common import make_after_callback, make_model_armor_callback
+from agents._common import (
+    make_after_callback,
+    make_model_armor_callback,
+    make_tool_result_sanitizer_callback,
+)
 from agents._models import HEAVY, LIGHT, gen_content_config, pick_model
 
 
@@ -89,6 +93,7 @@ def build_critique_reviser_pair(
         tools=list(spec.extra_critique_tools or []),
         output_key=spec.critique_state_key,
         after_model_callback=make_model_armor_callback(),
+        after_tool_callback=make_tool_result_sanitizer_callback(),
         after_agent_callback=make_after_callback(
             agent_name=spec.critique_agent_name,
             skill_id=spec.critique_skill_id,
@@ -107,6 +112,7 @@ def build_critique_reviser_pair(
         # the revised version.
         output_key=spec.source_state_key,
         after_model_callback=make_model_armor_callback(),
+        after_tool_callback=make_tool_result_sanitizer_callback(),
         after_agent_callback=make_after_callback(
             agent_name=spec.reviser_agent_name,
             skill_id=spec.reviser_skill_id,

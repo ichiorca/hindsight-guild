@@ -58,3 +58,33 @@ def test_jsonable_scalars_passthrough():
     assert _jsonable("s") == "s"
     assert _jsonable(7) == 7
     assert _jsonable(None) is None
+
+
+def test_evidence_result_is_fully_jsonable():
+    """The 2nd prod offender: validate_claim returns customer_voice rows whose
+    signal_id is an ObjectId. _result must hand back JSON-serializable docs."""
+    from agents._evidence_tool import _result
+
+    sig = ObjectId()
+    voice = [{"_id": ObjectId(), "signal_id": sig, "text": "agent-ready store",
+              "ts": datetime(2026, 1, 1, tzinfo=UTC)}]
+    out = _result([], voice, "voice_supported", "ok")
+    assert out["voice"][0]["signal_id"] == str(sig)
+    json.dumps(out)  # the whole point — no PydanticSerializationError analog
+
+
+def test_tool_result_sanitizer_callback_coerces_objectid():
+    """The defensive after_tool_callback strips a leaked ObjectId so no tool can
+    reintroduce the bug. Returns a cleaned dict only when coercion was needed."""
+    from agents._common import make_tool_result_sanitizer_callback
+
+    cb = make_tool_result_sanitizer_callback()
+    oid = ObjectId()
+    dirty = {"voice": [{"signal_id": oid}]}
+    cleaned = cb(tool=None, args={}, tool_context=None, tool_response=dirty)
+    assert cleaned is not None
+    assert cleaned["voice"][0]["signal_id"] == str(oid)
+    json.dumps(cleaned)
+    # No-op (returns None) when already clean.
+    assert cb(tool=None, args={}, tool_context=None,
+              tool_response={"ok": 1}) is None

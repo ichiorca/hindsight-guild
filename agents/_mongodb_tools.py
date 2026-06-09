@@ -44,11 +44,11 @@ import re
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from bson import Decimal128, ObjectId
 from google.adk.tools import FunctionTool
 from google.genai import types
 
 from shared import mongo_tools
+from shared.bson_json import jsonable
 
 log = logging.getLogger(__name__)
 
@@ -538,29 +538,9 @@ def make_mongodb_tools(mode: Literal["read", "write"], *,
     return tools
 
 
-def _jsonable(value: Any) -> Any:
-    """Recursively coerce Mongo/BSON values into JSON-serializable forms.
-
-    ADK passes tool results back to the model as JSON; a raw ``ObjectId`` (or
-    ``datetime`` / ``Decimal128`` / bytes) ANYWHERE in a document — not just at
-    the top-level ``_id`` — makes that serialization raise
-    ``PydanticSerializationError`` and the agent run dies with an empty result.
-    (Hit in prod: ``customer_voice.signal_id`` is an ObjectId, surfaced by
-    ``mongodb_vector_search`` on signal-triggered drafts.) Walk nested
-    dicts/lists and convert the offenders."""
-    if isinstance(value, ObjectId):
-        return str(value)
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, Decimal128):
-        return str(value)
-    if isinstance(value, (bytes, bytearray)):
-        return None  # don't ship binary blobs back to the model
-    if isinstance(value, dict):
-        return {k: _jsonable(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_jsonable(v) for v in value]
-    return value
+# BSON→JSON coercion lives in shared.bson_json (single source of truth). Kept
+# under the historical private name so existing imports/tests keep working.
+_jsonable = jsonable
 
 
 def _stringify_id(doc: dict | None) -> dict | None:
