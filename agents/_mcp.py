@@ -31,6 +31,11 @@ Opting out:
   automatically if the server can't be launched (e.g. no Node on a laptop),
   so local pipeline runs keep working with no extra config.
 
+Opting IN hard (demo recording):
+  Set ``MONGODB_REQUIRE_MCP=1`` to forbid the silent fallback — if the MCP
+  server can't launch, agent construction raises instead of quietly serving
+  reads over pymongo. Use with ``scripts/preflight_demo.py``.
+
 Binary resolution: by default we invoke the globally-installed
 ``mongodb-mcp-server`` entry script via ``node`` directly. This avoids the
 npx cache fragility that bit Node 25 + mongodb-redact (the
@@ -241,6 +246,17 @@ def _use_pymongo_fallback() -> bool:
     return val in ("0", "false", "no", "off")
 
 
+def _require_mcp() -> bool:
+    """True if silent pymongo fallback is forbidden (``MONGODB_REQUIRE_MCP=1``).
+
+    Set this while recording the demo: a draft that quietly runs on pymongo
+    instead of the live MCP server is worse than one that fails loudly,
+    because the video's "agents read Atlas via MCP" claim stops being true.
+    """
+    val = os.environ.get("MONGODB_REQUIRE_MCP", "").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
 def _pymongo_tools(mode: Literal["read", "write"], agent_name: str) -> list:
     from agents._mongodb_tools import make_mongodb_tools
     return make_mongodb_tools(mode, agent_name=agent_name)
@@ -265,11 +281,19 @@ def mongodb_toolset(mode: Literal["read", "write"], *,
         tools=[*mongodb_toolset(mode="write", agent_name=name), other_tool, ...]
     """
     if _use_pymongo_fallback():
+        if _require_mcp():
+            raise RuntimeError(
+                "MONGODB_USE_MCP=0 conflicts with MONGODB_REQUIRE_MCP=1 — "
+                "unset one of them.")
         return _pymongo_tools(mode, agent_name)
 
     try:
         read_toolset = _mcp_read_toolset()
     except Exception as exc:
+        if _require_mcp():
+            raise RuntimeError(
+                "MongoDB MCP server required (MONGODB_REQUIRE_MCP=1) but it "
+                f"could not be launched: {exc}") from exc
         log.warning(
             "MongoDB MCP server unavailable (%s); falling back to pymongo "
             "FunctionTools. Set MONGODB_USE_MCP=0 to silence this.", exc,

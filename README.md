@@ -1,16 +1,58 @@
 # Hindsight Guild
 
 **A marketing team of one's own — that remembers, learns, and levels up.**
-Built on Gemini + MongoDB Atlas.
+Built on Gemini + Google Cloud Agent Builder + MongoDB Atlas.
+
+🌐 **Live app:** <https://gen-lang-client-0079238279.web.app> ·
+▶ **3-min demo video:** 〈YouTube link — added at submission〉 ·
+🏆 **Track:** MongoDB · 📄 Apache-2.0
 
 Hindsight Guild is an autonomous marketing team for **solo founders**: a guild
 of Gemini agents on Google Cloud Agent Builder that researches, drafts,
-fact-checks, and routes content for approval — then learns from every decision.
-Its memory, judgment, and learning all live in **MongoDB Atlas**, queried live
-through the MongoDB MCP server. The team **remembers** what worked (Atlas as the
-system of record, including agent memory in `agent_lessons`), **learns** from
-what got rejected (rubric grounding on past negatives), and **levels up** its
-own playbooks over time (versioned skills + promotion gate).
+fact-checks, and routes content for approval — then **publishes for real**
+(Dev.to, Substack, LinkedIn, Google Ads, Meta Ads) and learns from every
+decision. Its memory, judgment, and learning all live in **MongoDB Atlas**,
+queried live through the MongoDB MCP server. The team **remembers** what
+worked (Atlas as the system of record, including agent memory in
+`agent_lessons`), **learns** from what got rejected (rubric grounding on past
+negatives), and **levels up** its own playbooks over time (versioned skills +
+promotion gate).
+
+**Why it matters:** a solo founder *is* the marketing department — and has no
+time to be. Most "AI marketing" tools are a chatbot around a prompt: they
+answer, they don't *act*, and they never get better. Hindsight Guild closes
+the whole loop — signal → research → draft → review → human approval →
+publish → outcome attribution → self-improvement — and the
+remember/learn/level-up core generalizes to **any agent team that has to
+learn from its own history**, far beyond marketing.
+
+## See it work in 5 minutes
+
+1. **Draft** ([live](https://gen-lang-client-0079238279.web.app/draft)) — ask
+   for a LinkedIn post. Watch the agent call the **MongoDB MCP server**
+   (`mongodb_find`, `mongodb_aggregate`) and pull real customer quotes via
+   **Atlas Vector Search with Automated Embedding** — plain text in, scored
+   documents out, no client-side embedding code or key.
+2. **Queue** — the draft arrives scored on six rubrics (Vertex AI Gen AI
+   Evaluation Service), each grounded in *past rejections* stored in MongoDB.
+   Reject it with a reason.
+3. **Draft again** — the rejection is already a `negative_examples` row (with
+   a provenance record + history pre-image), and the next similar draft is
+   penalized for the same weakness. **The system changed its behavior from
+   one row in MongoDB.**
+4. **Learning / Weekly Review** — nightly miners turn edits, rejections, ad
+   under-performance, and signal outcomes into proposed playbook revisions; a
+   weekly promotion gate re-verifies them and the founder flips
+   `current_version` with one click.
+5. **Agents / Live** — the whole guild runs as 13 deployed Cloud Run services
+   speaking the **Agent2Agent (A2A) protocol**, with Cloud Scheduler driving
+   the weekly CMO cycle, nightly eval re-grades, and signal-triggered
+   drafting.
+
+Approving a draft **takes action**: blog posts publish to Dev.to, newsletters
+to Substack, posts to LinkedIn, and ad variants land in Google/Meta Ads
+(paused, spend-safe) — then GA4/HubSpot/Ads outcomes flow back to close the
+loop.
 
 Built around real ADK 1.x multi-agent primitives, the Agent2Agent protocol,
 Vertex AI Gen AI Evaluation Service, and Model Armor — with **MongoDB Atlas as
@@ -181,9 +223,10 @@ hindsight-guild/
 └── tests/{unit,integration,e2e}/
 ```
 
-## What's different from the initial cut
+## No stubs — the hard parts are real
 
-Everything below was either weak or stubbed in the first pass; now real:
+Every component below started life as the easy version; each was rebuilt on
+the real primitive:
 
 | Component | Was | Now |
 |---|---|---|
