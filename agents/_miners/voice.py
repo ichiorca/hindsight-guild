@@ -102,7 +102,8 @@ def mine(db, *, lookback_days: int = 7,
             "decision": "edit",
             "decided_at": {"$gte": cutoff},
         }, {
-            "telemetry_id": 1, "approved_text": 1, "decided_at": 1,
+            "telemetry_id": 1, "approved_text": 1, "original_draft": 1,
+            "decided_at": 1,
         }).limit(500))
     except Exception as e:
         log.warning("voice miner approvals query failed: %s", e)
@@ -136,7 +137,12 @@ def mine(db, *, lookback_days: int = 7,
             continue
         action = actions_by_tid.get(tid) or {}
         raw = action.get("raw") or {}
-        before = raw.get("draft") or raw.get("output_text") or ""
+        # Prefer the approval's OWN original_draft — it's always present and is
+        # the exact pre-edit text. Fall back to the action's stored draft.
+        # (Signal-triggered drafts have several action rows per telemetry_id
+        # and the one we join often carries raw=None, so the action-only path
+        # silently misses the "before" and the miner never sees the edit.)
+        before = edit.get("original_draft") or raw.get("draft") or raw.get("output_text") or ""
         if isinstance(before, dict):
             before = before.get("body_markdown") or before.get("body") or ""
         after = edit.get("approved_text") or ""
@@ -221,7 +227,10 @@ def mine(db, *, lookback_days: int = 7,
         candidates.append((freq, ngram, "add",
                            len(drafts_by_ngram_added.get(ngram, set()))))
 
-    candidates.sort(key=lambda x: (-x[0], -x[3]))
+    # Rank by frequency, then by SPECIFICITY (more words = more actionable:
+    # "free protocol audit" beats a bare "your") so the top proposals aren't
+    # generic single common words, then by distinct-draft coverage.
+    candidates.sort(key=lambda x: (-x[0], -x[1].count(" "), -x[3]))
     plain_props: list[tuple[int, dict]] = []
     for freq, ngram, kind, drafts in candidates:
         if kind == "remove":
