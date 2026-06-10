@@ -360,6 +360,7 @@ export default function DraftingPage() {
           {draft.isError && !draft.isPending && (
             <ErrorState
               what="the draft"
+              detail={(draft.error as Error)?.message}
               onRetry={() => submit()}
             />
           )}

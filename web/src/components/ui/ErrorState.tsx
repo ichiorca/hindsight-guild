@@ -4,6 +4,9 @@ import { cn } from "@/lib/utils";
 interface ErrorStateProps {
   /** What failed, in plain language (e.g. "the approval queue"). */
   what?: string;
+  /** Optional underlying error message, shown under the generic copy so the
+   * founder can tell a timeout from a server-side failure. */
+  detail?: string;
   /** Refetch callback from the failing react-query hook. */
   onRetry?: () => void;
   className?: string;
@@ -14,7 +17,7 @@ interface ErrorStateProps {
  * backend outage never masquerades as "nothing here / all clear" — the
  * single biggest trust gap in the original UI.
  */
-export function ErrorState({ what = "this data", onRetry, className }: ErrorStateProps) {
+export function ErrorState({ what = "this data", detail, onRetry, className }: ErrorStateProps) {
   return (
     <div
       role="alert"
@@ -34,6 +37,11 @@ export function ErrorState({ what = "this data", onRetry, className }: ErrorStat
         The server didn't respond as expected. This is a connection problem,
         not an empty inbox — your data is safe.
       </p>
+      {detail && (
+        <p className="text-xs text-muted-foreground/80 max-w-md leading-relaxed mt-2 font-mono">
+          {detail}
+        </p>
+      )}
       {onRetry && (
         <button
           onClick={onRetry}

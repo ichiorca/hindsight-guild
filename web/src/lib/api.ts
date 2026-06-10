@@ -745,11 +745,16 @@ interface DraftJob {
 }
 
 const DRAFT_POLL_INTERVAL_MS = 2_000;
-// ~6 min ceiling. Must exceed the web-api → pipeline read timeout (300s in
+// ~8 min ceiling. Must exceed the web-api → pipeline read timeout (300s in
 // services/web_api/routers/drafting.py) so the UI sees the final done/failed
-// state rather than giving up early — gemini-2.5-pro drafts run ~4-5 min, so a
-// 3-min budget timed out the UI even though the job completed + landed.
-const DRAFT_POLL_MAX_ATTEMPTS = 180;
+// state rather than giving up early — gemini-2.5-pro drafts run ~4-5 min,
+// longer on a cold start.
+const DRAFT_POLL_MAX_ATTEMPTS = 240;
+// A 4-5 min draft makes ~150 poll requests through Firebase Hosting → Cloud
+// Run; the odd transient 502/503 (or a wifi blip) is expected. One bad poll
+// must NOT fail the whole draft — only losing this many CONSECUTIVE polls
+// counts as having lost the job.
+const DRAFT_POLL_MAX_CONSECUTIVE_MISSES = 5;
 
 export function useDraft() {
   return useMutation({
@@ -768,9 +773,24 @@ export function useDraft() {
       visual_pref?: string;
     }): Promise<Record<string, unknown>> => {
       const { job_id } = await post<{ job_id: string; status: string }>("/draft", p);
+      let misses = 0;
       for (let i = 0; i < DRAFT_POLL_MAX_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, DRAFT_POLL_INTERVAL_MS));
-        const job = await get<DraftJob>(`/draft/${job_id}`);
+        let job: DraftJob;
+        try {
+          job = await get<DraftJob>(`/draft/${job_id}`);
+          misses = 0;
+        } catch {
+          // Transient poll failure — the job is still running server-side.
+          if (++misses >= DRAFT_POLL_MAX_CONSECUTIVE_MISSES) {
+            throw new Error(
+              `lost contact with draft job ${job_id} after ${misses} ` +
+              "consecutive poll failures — check the Queue in a minute; " +
+              "the draft may still land there"
+            );
+          }
+          continue;
+        }
         if (job.status === "done" && job.result) return job.result;
         if (job.status === "failed") {
           throw new Error(job.error || "draft job failed");
