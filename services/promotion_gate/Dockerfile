@@ -6,6 +6,7 @@ COPY pyproject.toml ./pyproject.toml
 RUN pip install --no-cache-dir '.[worker-bq]'
 
 COPY shared/ ./shared/
+COPY mongo/ ./mongo/
 COPY agents/ ./agents/
 COPY services/promotion_gate/ ./services/promotion_gate/
 

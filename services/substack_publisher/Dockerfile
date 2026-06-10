@@ -6,6 +6,7 @@ COPY pyproject.toml ./pyproject.toml
 RUN pip install --no-cache-dir '.[http-publisher]'
 
 COPY shared/ ./shared/
+COPY mongo/ ./mongo/
 COPY agents/_common.py ./agents/_common.py
 COPY agents/__init__.py ./agents/__init__.py
 COPY services/substack_publisher/ ./services/substack_publisher/

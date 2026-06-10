@@ -6,6 +6,7 @@ COPY pyproject.toml ./pyproject.toml
 RUN pip install --no-cache-dir '.[worker-bq]'
 
 COPY shared/ ./shared/
+COPY mongo/ ./mongo/
 COPY services/outcome_attach/ ./services/outcome_attach/
 
 ENV PYTHONPATH=/app
