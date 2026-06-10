@@ -128,7 +128,7 @@ CRONS: list[dict] = [
      "schedule": "30 0 * * *",
      "description": "Route pending signals into channel drafts (enqueues draft jobs).",
      "danger": False},
-    {"name": "outcome-attach", "kind": "job", "schedule": "0 */6 * * *",
+    {"name": "outcome-attach", "kind": "job", "schedule": "0 3 */2 * *",
      "description": "Attach realized outcomes (opens/clicks/etc.) to drafting actions.",
      "danger": False},
     {"name": "eval-harness", "kind": "job", "schedule": "0 3 * * *",

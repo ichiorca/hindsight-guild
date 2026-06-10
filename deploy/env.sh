@@ -74,7 +74,7 @@ declare -A JOBS=(
 #   positioning-review → promotion-gate (both Sunday evening)
 # ---------------------------------------------------------------------------
 declare -A SCHEDULES=(
-  [outcome-attach]="0 */6 * * *"          # every 6 hours
+  [outcome-attach]="0 3 */2 * *"          # every 2nd day 03:00 UTC (~48h; 6h was aggressive for slot deadlines measured in days)
   [eval-harness]="0 3 * * *"              # nightly 03:00
   [derive-track-records]="30 3 * * *"     # nightly 03:30 (after eval-harness)
   [drift-detect]="30 4 * * *"             # daily 04:30 (after derive)
