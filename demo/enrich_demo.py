@@ -427,6 +427,125 @@ def enrich_experiments() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Candidate A/B staging — give the promotion gate something REAL to decide.
+#
+# The gate's playbook path (services/promotion_gate/main.py::_evaluate_candidate)
+# compares candidate-vs-incumbent telemetry: >=50 scored actions per arm in 30d,
+# success-metric lift >= MDE (0.05) at z >= 1.96, guardrails within 3pp. This
+# stages exactly that evidence for nurture_email (success metric:
+# conversion_intent) — openly seeded arms, but the GATE'S DECISION is computed
+# for real by the deployed job, and the founder's approval flips
+# current_version through the real promote_after_approval path.
+# ---------------------------------------------------------------------------
+
+_AB_PREFIX = "enr_ab_"
+
+
+def _clamp(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+def _ab_arm_rows(version: str, n: int, ci_mean: float,
+                 days_span: float) -> list[dict]:
+    rows = []
+    for i in range(n):
+        ts = NOW - timedelta(days=RNG.uniform(0, days_span),
+                             hours=RNG.randint(0, 23))
+        brand_voice = _clamp(RNG.gauss(0.82, 0.05))
+        claim_support = _clamp(RNG.gauss(0.86, 0.04))
+        scores = {
+            "brand_voice": brand_voice,
+            "claim_support": claim_support,
+            "claim_risk": _clamp(RNG.gauss(0.84, 0.04)),
+            "icp_relevance": _clamp(RNG.gauss(0.80, 0.05)),
+            "originality": _clamp(RNG.gauss(0.74, 0.06)),
+            "conversion_intent": _clamp(RNG.gauss(ci_mean, 0.07)),
+            "answer_extractability": _clamp(RNG.gauss(0.72, 0.06)),
+        }
+        raw = {"seeded": True, "enriched": True}
+        raw.update(_synthesize_draft_raw(
+            channel="email", icp=RNG.choice(SEED_ICPS),
+            brand_voice=brand_voice, claim_support=claim_support))
+        tid = (f"{_AB_PREFIX}{version}_"
+               f"{hashlib.sha256(f'{version}:{i}'.encode()).hexdigest()[:8]}")
+        rows.append({
+            "telemetry_id": tid,
+            "ts": ts.isoformat(),
+            "agent": "content_agent",
+            "skill_id": "nurture_email",
+            "skills_loaded": ["house-style", "copywriting", "emails"],
+            "skill_version": version,
+            "action_type": "draft_email",
+            "channel": "email",
+            "experiment_id": "exp_nurture_email_v1_rollout",
+            "eval_scores": scores,
+            "model_armor": {"decision": "allow", "categories": []},
+            "raw": raw,
+        })
+    return rows
+
+
+def stage_nurture_email_candidate() -> None:
+    """Stage the v0-vs-v1 A/B for nurture_email so the gate can decide."""
+    db = mongo_tools.db()
+    skill = db["skills"].find_one({"_id": "nurture_email"}) or {}
+    if skill.get("promotion_request"):
+        print("nurture_email already has a promotion_request — nothing to stage")
+        return
+
+    bq = _bq()
+    sql = (f"SELECT COUNT(*) AS n FROM `{PROJECT_ID}.telemetry.actions` "
+           f"WHERE telemetry_id LIKE '{_AB_PREFIX}%'")
+    have = next(iter(bq.query(sql).result())).n
+    if have:
+        print(f"A/B telemetry already present ({have} rows) — skipping insert")
+    else:
+        # v1 lift on conversion_intent: 0.74 vs 0.62 = +0.12 (MDE is 0.05);
+        # sd 0.07 @ n=60/arm gives z ~ 9 — clearly significant. Guardrails
+        # are drawn from the same distributions on both arms.
+        rows = _ab_arm_rows("v0", 60, 0.62, 12) + _ab_arm_rows("v1", 60, 0.74, 8)
+        bq_rows = []
+        for a in rows:
+            row = dict(a)
+            for json_col in ("eval_scores", "model_armor", "raw"):
+                row[json_col] = json.dumps(row[json_col])
+            bq_rows.append(row)
+        errors = bq.insert_rows_json(f"{PROJECT_ID}.telemetry.actions", bq_rows)
+        if errors:
+            sys.exit(f"BQ A/B insert errors: {errors[:3]}")
+        print(f"inserted {len(rows)} A/B telemetry rows (60 per arm)")
+
+    # Candidate registration — what the gate's playbook query keys on.
+    history = skill.get("history") or ["v0"]
+    db["skills"].update_one({"_id": "nurture_email"}, {"$set": {
+        "candidates": ["v1"],
+    }})
+    db["experiments"].update_one({"_id": "exp_nurture_email_v1_rollout"}, {"$set": {
+        "_id": "exp_nurture_email_v1_rollout",
+        "title": "Nurture email v1 (sub-40-char subjects) vs v0",
+        "hypothesis": ("Mobile-first subject lines (<40 chars, hook in the "
+                       "first 5 words) lift conversion_intent vs the v0 "
+                       "playbook."),
+        "icp_segment": "seg_merchant_dtc",
+        "channel": "email",
+        "variants": [
+            {"id": "A_incumbent_v0", "playbook_version": "v0", "allocation_pct": 50},
+            {"id": "B_candidate_v1", "playbook_version": "v1", "allocation_pct": 50},
+        ],
+        "success_metric": "conversion_intent",
+        "mde": 0.05,
+        "state": "running",
+        "created_at": NOW - timedelta(days=12),
+        "decided_at": None,
+        "tags": ["playbook", "rollout"],
+    }}, upsert=True)
+    print("staged: nurture_email.candidates=['v1'] + experiment doc "
+          f"(history={history}).\n"
+          "NEXT: run the promotion-gate job — it will evaluate the arms and, "
+          "if the lift holds, raise a promotion_request for founder approval.")
+
+
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     _guard()
@@ -463,4 +582,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if "--stage-candidate" in sys.argv:
+        _guard()
+        stage_nurture_email_candidate()
+    else:
+        main()
