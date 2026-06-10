@@ -131,6 +131,7 @@ from services.web_api.routers import (  # noqa: E402
     capabilities,
     drafting,
     experiments,
+    founder_dashboard,
     health,
     integrations,
     live,
@@ -152,6 +153,7 @@ app.include_router(skills.router)
 app.include_router(self_critique.router)
 app.include_router(signals.router)
 app.include_router(rubric_trends.router)
+app.include_router(founder_dashboard.router)
 app.include_router(voice.router)
 app.include_router(drafting.router)
 app.include_router(weekly_review.router)

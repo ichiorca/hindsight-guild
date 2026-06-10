@@ -155,7 +155,18 @@ MERMAID_RENDERER_URL="$(gcloud run services describe mermaid-renderer --region="
 # for coverage; raise toward 1.0 only if quota allows.
 EVAL_SAMPLE_RATE="${EVAL_SAMPLE_RATE:-0.5}"
 
+# Forbid the silent MCP→pymongo fallback in deployed agents (agents/_mcp.py):
+# the agent image ships Node + mongodb-mcp-server, so a fallback there means
+# something is broken — fail loudly rather than quietly serving reads over
+# pymongo while the demo claims "agents read Atlas via MCP". Set to 0 to relax.
+MONGODB_REQUIRE_MCP="${MONGODB_REQUIRE_MCP:-1}"
+
 GENAI="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},EVAL_SAMPLE_RATE=${EVAL_SAMPLE_RATE},${MODELS}"
+
+# web-api reads analytics (rubric trend, weekly summary, live feed, skill
+# samples, founder dashboard) from BigQuery; Mongo remains the operational
+# store + fallback. Set to 0 to force Mongo-only reads (thin local installs).
+WEB_API_USE_BQ="${WEB_API_USE_BQ:-1}"
 
 # Mounted as an env var (Cloud Run --set-secrets) so the Developer-API genai
 # client can authenticate. sa-agents gets secretAccessor via SECRETS_FOR_AGENTS.

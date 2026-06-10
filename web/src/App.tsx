@@ -17,6 +17,7 @@ import Signals from "@/routes/Signals";
 import Learning from "@/routes/Learning";
 import Published from "@/routes/Published";
 import Admin from "@/routes/Admin";
+import FounderDashboard from "@/routes/FounderDashboard";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/queue" replace />} />
+          <Route path="/dashboard"     element={<FounderDashboard />} />
           <Route path="/queue"         element={<Queue />} />
           <Route path="/published"     element={<Published />} />
           <Route path="/weekly-review" element={<WeeklyReview />} />

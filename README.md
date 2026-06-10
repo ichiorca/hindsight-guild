@@ -3,7 +3,7 @@
 **A marketing team of one's own — that remembers, learns, and levels up.**
 Built on Gemini + Google Cloud Agent Builder + MongoDB Atlas.
 
-🌐 **Live app:** <https://gen-lang-client-0079238279.web.app> ·
+🌐 **Live app:** <https://hindsight-guild.web.app> ·
 ▶ **3-min demo video:** 〈YouTube link — added at submission〉 ·
 🏆 **Track:** MongoDB · 📄 Apache-2.0
 
@@ -28,7 +28,7 @@ learn from its own history**, far beyond marketing.
 
 ## See it work in 5 minutes
 
-1. **Draft** ([live](https://gen-lang-client-0079238279.web.app/draft)) — ask
+1. **Draft** ([live](https://hindsight-guild.web.app/draft)) — ask
    for a LinkedIn post. Watch the agent call the **MongoDB MCP server**
    (`mongodb_find`, `mongodb_aggregate`) and pull real customer quotes via
    **Atlas Vector Search with Automated Embedding** — plain text in, scored

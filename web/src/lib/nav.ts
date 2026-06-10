@@ -16,7 +16,8 @@
  */
 import {
   Inbox, CalendarCheck, PencilLine, FlaskConical, Layers, Quote, LineChart,
-  Activity, BookOpen, Users, Radar, Brain, Send, SlidersHorizontal, type LucideIcon,
+  Activity, BookOpen, Users, Radar, Brain, Send, SlidersHorizontal,
+  TrendingUp, type LucideIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -44,6 +45,8 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       // Daily-driver first: the Queue is the founder's #1 landing page.
       { to: "/queue",         label: "Approval Queue", icon: Inbox,         description: "Decide on drafts" },
+      // The business-value rollup — what shipped, what it cost, what it saved.
+      { to: "/dashboard",     label: "Founder Dashboard", icon: TrendingUp, description: "ROI & impact" },
       // Drafting is the create action — second so it's one click away.
       { to: "/draft",         label: "Drafting",       icon: PencilLine,    description: "Run the pipeline" },
       // Signals — auto-triggers that land in the queue with a Triggered-by chip.

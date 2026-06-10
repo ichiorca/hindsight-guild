@@ -26,7 +26,7 @@ for name in "${!A2A_APPS[@]}"; do
     --args="agents.a2a_server:${app_attr},--host,0.0.0.0,--port,8080" \
     --region="$REGION" \
     --service-account="$SA" \
-    --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+    --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},MONGODB_REQUIRE_MCP=${MONGODB_REQUIRE_MCP},${GENAI}" \
     --set-secrets="${GENAI_SECRETS}" \
     --memory=1Gi --cpu=1 \
     --no-allow-unauthenticated \
@@ -116,7 +116,7 @@ gcloud run deploy web-api \
   --image="$(image_ref web-api)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},WEB_API_USE_BQ=${WEB_API_USE_BQ},${GENAI}" \
     --set-secrets="${GENAI_SECRETS}" \
   --memory=1Gi --cpu=1 \
   --allow-unauthenticated \

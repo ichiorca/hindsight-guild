@@ -783,3 +783,72 @@ export function useDraft() {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Founder Dashboard (ROI) + learning receipts/curve
+// ---------------------------------------------------------------------------
+
+export interface FounderDashboardData {
+  days: number;
+  assets: {
+    drafted: number;
+    decided: number;
+    approved: number;
+    edited: number;
+    rejected: number;
+    published: number;
+    by_channel: Record<string, number>;
+  };
+  approval_trend: { day: string; approve: number; edit: number; reject: number; rate: number }[];
+  outcomes: { filled: number; pending: number; total_value: number };
+  roi: {
+    founder_minutes: number;
+    freelancer_equivalent_usd: number;
+    api_cost_usd: number;
+    leverage: number | null;
+    assumptions: { note?: string } & Record<string, unknown>;
+  };
+}
+
+export function useFounderDashboard(days = 7) {
+  return useQuery({
+    queryKey: ["founder-dashboard", days],
+    queryFn: () => get<FounderDashboardData>(`/founder-dashboard?days=${days}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export interface LearningReceipt {
+  channel: string | null;
+  decision: "reject" | "edit";
+  reason: string;
+  decided_at: string | null;
+  before: { telemetry_id: string; ts: string; scores: Record<string, number>; snippet: string };
+  after: { telemetry_id: string; ts: string; scores: Record<string, number>; snippet: string };
+  deltas: Record<string, number>;
+  top_rubric: string;
+  top_delta: number;
+  improved: boolean;
+}
+
+export function useLearningReceipts(days = 28, limit = 8) {
+  return useQuery({
+    queryKey: ["learning-receipts", days, limit],
+    queryFn: () => get<LearningReceipt[]>(`/learning-receipts?days=${days}&limit=${limit}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export interface LearningCurvePoint {
+  day: string;
+  quality: number | null;
+  n: number;
+  rejections: number;
+}
+
+export function useLearningCurve(days = 28) {
+  return useQuery({
+    queryKey: ["learning-curve", days],
+    queryFn: () => get<LearningCurvePoint[]>(`/learning-curve?days=${days}`),
+  });
+}

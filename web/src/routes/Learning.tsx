@@ -1,12 +1,19 @@
-import { Brain, ArrowRight, Lightbulb, Trophy, Sparkles, RefreshCw, X } from "lucide-react";
+import { Brain, ArrowRight, Lightbulb, Trophy, Sparkles, RefreshCw, X, Receipt } from "lucide-react";
+import {
+  ComposedChart, Line, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, Legend,
+} from "recharts";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Empty } from "@/components/ui/Empty";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { useLearningSummary, useRunSelfCritiqueNow, useSelfCritiqueRuns } from "@/lib/api";
-import type { LearningSummary, SelfCritiqueRun } from "@/lib/api";
+import {
+  useLearningSummary, useRunSelfCritiqueNow, useSelfCritiqueRuns,
+  useLearningCurve, useLearningReceipts,
+} from "@/lib/api";
+import type { LearningSummary, SelfCritiqueRun, LearningReceipt } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { relativeTime } from "@/lib/humanize";
@@ -34,6 +41,8 @@ export default function LearningPage() {
   const { data, isLoading, isError, refetch } = useLearningSummary(7);
   const runNow = useRunSelfCritiqueNow();
   const runs = useSelfCritiqueRuns(14);
+  const curve = useLearningCurve(28);
+  const receipts = useLearningReceipts(28, 6);
 
   return (
     <div className="flex flex-col">
@@ -71,6 +80,8 @@ export default function LearningPage() {
           <>
             <KpiBand summary={data} />
             <TheLoop summary={data} />
+            <Receipts receipts={receipts.data} loading={receipts.isLoading} />
+            <LearningCurve points={curve.data} loading={curve.isLoading} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <RecentEvents events={data.events} />
               <PerMinerTable rows={data.per_miner_28d} />
@@ -80,6 +91,151 @@ export default function LearningPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Receipts — concrete before→after proof: a rejected draft, the next draft on
+// the same channel, and the rubric that moved. The judge doesn't have to take
+// "one row in MongoDB changed behavior" on faith — here's the row and the delta.
+// ---------------------------------------------------------------------------
+
+const RUBRIC_LABELS: Record<string, string> = {
+  brand_voice: "Brand voice",
+  claim_support: "Claim support",
+  claim_risk: "Claim risk",
+  icp_relevance: "ICP relevance",
+  originality: "Originality",
+  conversion_intent: "Conversion intent",
+  answer_extractability: "AEO",
+};
+
+function Receipts({ receipts, loading }: { receipts?: LearningReceipt[]; loading: boolean }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Receipt className="h-4 w-4 text-primary" /> Learning receipts
+        </CardTitle>
+        <CardDescription>
+          A rejection becomes a negative example in MongoDB; the next draft on that channel is graded
+          against it. Before → after, with the rubric that moved.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading && <Skeleton className="h-32" />}
+        {!loading && (receipts?.length ?? 0) === 0 && (
+          <Empty
+            icon={Receipt}
+            title="No receipts yet"
+            description="Reject a draft in the Queue with a reason, then draft a similar brief — the before/after pair lands here."
+          />
+        )}
+        {!loading && (receipts?.length ?? 0) > 0 && (
+          <ul className="divide-y">
+            {receipts!.map((r, i) => {
+              const before = r.before.scores[r.top_rubric];
+              const after = r.after.scores[r.top_rubric];
+              return (
+                <li key={i} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="muted" className="text-[10px]">{r.channel}</Badge>
+                    <Badge
+                      variant={r.decision === "reject" ? "destructive" : "muted"}
+                      className="text-[10px]"
+                    >
+                      {r.decision === "reject" ? "rejected" : "edited"}
+                    </Badge>
+                    {r.reason && (
+                      <span className="text-xs text-muted-foreground italic truncate max-w-md">
+                        “{r.reason}”
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 flex-wrap text-sm">
+                    <span className="text-muted-foreground">
+                      {RUBRIC_LABELS[r.top_rubric] ?? r.top_rubric}
+                    </span>
+                    <span className="tabular-nums">{(before * 100).toFixed(0)}%</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className={cn(
+                      "tabular-nums font-semibold",
+                      r.improved ? "text-success" : "text-destructive",
+                    )}>
+                      {(after * 100).toFixed(0)}%
+                    </span>
+                    <Badge
+                      variant={r.improved ? "muted" : "destructive"}
+                      className={cn("text-[10px] tabular-nums", r.improved && "text-success")}
+                    >
+                      {r.top_delta > 0 ? "+" : ""}{(r.top_delta * 100).toFixed(0)} pts
+                    </Badge>
+                  </div>
+                  {(r.before.snippet || r.after.snippet) && (
+                    <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                      <p className="truncate"><b>before:</b> {r.before.snippet}</p>
+                      <p className="truncate"><b>after:</b> {r.after.snippet}</p>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Learning curve — daily quality index vs the rejections that taught it
+// ---------------------------------------------------------------------------
+
+function LearningCurve({ points, loading }: {
+  points?: { day: string; quality: number | null; n: number; rejections: number }[];
+  loading: boolean;
+}) {
+  const data = (points ?? []).filter((p) => p.quality != null || p.rejections > 0);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Learning curve · 28 days</CardTitle>
+        <CardDescription>
+          Daily quality index (brand voice + claim support + AEO) over the rejections fed back into the rubric.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading && <Skeleton className="h-56" />}
+        {!loading && data.length === 0 && (
+          <Empty title="No scored drafts yet" description="Draft something — every run is rubric-scored." />
+        )}
+        {!loading && data.length > 0 && (
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+              <YAxis
+                yAxisId="q"
+                domain={[0.5, 1]}
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickFormatter={(v) => `${Math.round(Number(v) * 100)}%`}
+              />
+              <YAxis yAxisId="rej" orientation="right" allowDecimals={false}
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+              <Tooltip
+                contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid hsl(var(--border))" }}
+                formatter={(v: number | string, name: string) =>
+                  name === "quality index" ? `${(Number(v) * 100).toFixed(1)}%` : v}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar yAxisId="rej" dataKey="rejections" name="rejections" fill="#e4a11b" opacity={0.5} />
+              <Line yAxisId="q" type="monotone" dataKey="quality" name="quality index"
+                stroke="#00b8b8" strokeWidth={2} dot={false} connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
