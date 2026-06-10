@@ -149,15 +149,31 @@ class _SanitizedMcpToolset(McpToolset):
     We rewrite that schema (in place on the freshly-fetched tool objects)
     before ADK ever converts it, so the MongoDB MCP server's 2020-12 schemas
     load cleanly instead of failing with ``extra_forbidden``.
+
+    It also PINS each tool's ``database`` parameter to the one database this
+    deployment uses (enum with a single value). The MCP server requires
+    ``database`` on every call; lighter models (gemini-2.5-flash) sometimes
+    omitted it ("Invalid input: expected string, received undefined") or
+    invented a name, which surfaced as apology text inside drafts. An enum
+    makes the right value the only value any model can emit.
     """
 
     async def get_tools(self, readonly_context=None):  # type: ignore[override]
+        from shared.mongo_tools import DB_NAME
         tools = await super().get_tools(readonly_context)
         for tool in tools:
             raw = getattr(tool, "_mcp_tool", None)
             schema = getattr(raw, "inputSchema", None)
             if isinstance(schema, dict):
-                raw.inputSchema = _to_draft7(schema)
+                schema = _to_draft7(schema)
+                props = schema.get("properties")
+                if isinstance(props, dict) and "database" in props:
+                    props["database"] = {
+                        "type": "string",
+                        "enum": [DB_NAME],
+                        "description": f"Always '{DB_NAME}' on this deployment.",
+                    }
+                raw.inputSchema = schema
         return tools
 
 
