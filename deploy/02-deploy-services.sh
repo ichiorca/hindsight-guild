@@ -117,7 +117,7 @@ gcloud run deploy web-api \
   --region="$REGION" \
   --service-account="$SA" \
   --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},WEB_API_USE_BQ=${WEB_API_USE_BQ},${GENAI}" \
-    --set-secrets="${GENAI_SECRETS}" \
+    --set-secrets="${GENAI_SECRETS},HUBSPOT_API_TOKEN=hubspot_api_token:latest" \
   --memory=1Gi --cpu=1 \
   --allow-unauthenticated \
   --project="$PROJECT_ID"

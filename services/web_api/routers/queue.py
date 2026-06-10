@@ -560,6 +560,8 @@ def _try_publish_for_channel(d: Decision, actor_id: str, now: datetime) -> dict:
             result = _publish_google_ads(d)
         elif channel == "meta_ads":
             result = _publish_meta_ads(d, icp_segment, topic_hint)
+        elif channel in ("email", "lifecycle_email"):
+            result = _publish_email(d, icp_segment, topic_hint, actor_id, now)
         else:
             return {"status": "no_route", "channel": channel}
     except _PublishSkipped as e:
@@ -680,6 +682,96 @@ def _publish_devto(d: Decision, icp_segment: str, topic_hint: str) -> dict:
         "url": article.url,
         "external_id": article.id,
         "title": article.title,
+    }
+
+
+def _coerce_email_sequence(approved_text: str, topic_hint: str) -> tuple[list[dict], str]:
+    """Normalize an approved email draft into (steps, sequence_name).
+
+    Accepts the Lifecycle Email Agent's JSON sequence shape
+    ({sequence_name, steps:[{step_num, subject, body, cta, delay_days}]}),
+    a single JSON step, or plain text/markdown (wrapped as a 1-step
+    sequence with a derived subject).
+    """
+    text = (approved_text or "").strip()
+    if text.startswith("{"):
+        try:
+            obj = json.loads(text)
+        except Exception:
+            obj = None
+        if isinstance(obj, dict):
+            if isinstance(obj.get("steps"), list) and obj["steps"]:
+                name = obj.get("sequence_name") or topic_hint or "nurture sequence"
+                return obj["steps"], name
+            if obj.get("subject") or obj.get("body"):
+                name = obj.get("subject") or topic_hint or "nurture email"
+                return [{"step_num": 1, "subject": obj.get("subject", ""),
+                         "body": obj.get("body", ""), "cta": obj.get("cta", ""),
+                         "delay_days": 0}], name
+    subject = subject_from_draft(text) or topic_hint or "nurture email"
+    return [{"step_num": 1, "subject": subject, "body": text,
+             "cta": "", "delay_days": 0}], subject
+
+
+def _publish_email(d: Decision, icp_segment: str, topic_hint: str,
+                   actor_id: str, now: datetime) -> dict:
+    """Approved email/lifecycle_email draft: ALWAYS persist the sequence to
+    ``email_sequences`` (status='approved', provenance-stamped), then stage
+    step 1 as a HubSpot DRAFT marketing email when the ESP is configured.
+    Never sends — same governance as paused ads. With no ESP configured the
+    dispatcher reports 'skipped' but the sequence is already saved."""
+    from shared.integrations.email_esp import (
+        EmailEspError,
+        EmailEspNotConfigured,
+        stage_draft_email,
+    )
+
+    steps, sequence_name = _coerce_email_sequence(d.approved_text or "", topic_hint)
+
+    from mongo.history import default_provenance_block
+    seq_id = f"seq_{d.telemetry_id}"
+    seq_doc = {
+        "_id": seq_id,
+        "sequence_name": sequence_name,
+        "icp_segment": icp_segment or None,
+        "steps": steps,
+        "status": "approved",
+        "created_at": now,
+        "drafted_by": "lifecycle_email_agent",
+        "approved_by": d.decided_by or actor_id,
+        "telemetry_id": d.telemetry_id,
+    }
+    try:
+        block = default_provenance_block(
+            actor_id=actor_id, kind="human", trust_tier="verified",
+            confidence=1.0, source_kind="founder_approval")
+        mongo_tools.db()["email_sequences"].update_one(
+            {"_id": seq_id}, {"$set": {**block, **seq_doc}}, upsert=True)
+    except Exception as e:  # persistence IS the deliverable — surface it
+        raise _PublishFailed("email_sequences", f"sequence persist failed: {e}") from e
+
+    first = steps[0] if steps else {}
+    try:
+        staged = stage_draft_email(
+            name=f"{sequence_name} — step 1"[:120],
+            subject=str(first.get("subject") or sequence_name),
+            body_html=str(first.get("body") or ""),
+        )
+    except EmailEspNotConfigured:
+        raise _PublishSkipped(
+            "hubspot",
+            f"sequence saved to email_sequences ({seq_id}); HubSpot not "
+            "configured — set HUBSPOT_API_TOKEN to stage ESP drafts",
+        ) from None
+    except EmailEspError as e:
+        raise _PublishFailed("hubspot", str(e)) from e
+
+    return {
+        "platform": "hubspot",
+        "url": staged.url,
+        "external_id": staged.id,
+        "title": sequence_name,
+        "sequence_id": seq_id,
     }
 
 

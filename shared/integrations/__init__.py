@@ -7,6 +7,8 @@ Currently wired:
   - LinkedIn UGC     — personal/org share via v2/ugcPosts
   - Google Ads       — paused Responsive Search Ad (RSA) draft
   - Meta Ads         — paused Facebook/Instagram ad creative
+  - Email (HubSpot)  — nurture sequence persisted + step 1 staged as a
+                       DRAFT marketing email (never auto-sent)
 
 Every integration here is gated on an env-var credential check
 (``<module>.is_configured()``). Missing creds → the integration is a
@@ -20,7 +22,7 @@ this table rather than maintaining their own switch.
 """
 from __future__ import annotations
 
-from . import devto, google_ads, linkedin, meta_ads, substack
+from . import devto, email_esp, google_ads, linkedin, meta_ads, substack
 
 # channel slug → (integration_module, human-readable platform name)
 # The platform name is the surface label the UI shows on the Ship-it
@@ -31,6 +33,10 @@ CHANNEL_ROUTES: dict[str, tuple[object, str]] = {
     "linkedin": (linkedin, "LinkedIn"),
     "google_ads": (google_ads, "Google Ads"),
     "meta_ads": (meta_ads, "Meta Ads"),
+    # Email ships as a HubSpot DRAFT (never auto-sends) + always persists
+    # the sequence to email_sequences — see queue.py::_publish_email.
+    "email": (email_esp, "HubSpot (draft)"),
+    "lifecycle_email": (email_esp, "HubSpot (draft)"),
 }
 
 
