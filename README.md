@@ -87,6 +87,21 @@ How every layer leans on the **MongoDB AI stack**:
 > BigQuery (`telemetry.*`) is **analytics-only** and read behind opt-in flags;
 > the operational ground truth is always MongoDB.
 
+**Proof in the console** — the live cluster, not a diagram:
+
+![The data layer in MongoDB Compass — canonical collections plus their history.* audit shadows and derived.* rollups, with a derived agent-skill track record open](docs/atlas-collections.png)
+*Every layer of the system is a collection: 22 canonical, a `history.*`
+pre-image shadow for each (the audit trail), `derived.*` rollups the nightly
+jobs recompute, and `agent_lessons` as agent memory. Open document: a
+`derived.agent_skill_track_records` rollup with per-rubric means.*
+
+![Atlas Search console — the customer_voice_vector index READY and queryable over text + icp_segment + theme](docs/atlas-autoembed-index.png)
+*The `customer_voice_vector` index (type `vectorSearch`, autoEmbed on `text`
+with `icp_segment`/`theme` as pre-filters — see `mongo/schema.py`) READY and
+queryable on the live cluster. Atlas embeds documents at insert and query
+text at search time; the index-fields column shows plain field names because
+there is no client-side vector field at all.*
+
 ## How the agents work as a team
 
 ```
