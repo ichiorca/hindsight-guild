@@ -136,7 +136,11 @@ SECRETS_FOR_AGENTS=(
 # family, but its free-tier rate limits made the multi-agent pipeline time out
 # (ReadTimeout > 300s), so we run on Vertex (SA quotas). The gemini-2.5
 # thinking/function-call quirk is handled in shared/models.gen_content_config.
-MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-2.5-pro},MODEL_LIGHT=${MODEL_LIGHT:-gemini-2.5-flash}"
+# Demo-window default: gemini-2.5-flash on the heavy tier too. 2.5-pro's
+# per-minute Vertex quota 429'd live drafting bursts (pipeline = several
+# sequential heavy calls + sampled 6-rubric eval); flash has the headroom.
+# Export MODEL_HEAVY=gemini-2.5-pro to restore the pro tier post-hackathon.
+MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-2.5-flash},MODEL_LIGHT=${MODEL_LIGHT:-gemini-2.5-flash}"
 
 # Diagram renderer URL — shared/diagrams.py reads MERMAID_RENDERER_URL to render
 # infographic/excalidraw diagrams (image_brief). Resolved from the live
@@ -153,7 +157,7 @@ MERMAID_RENDERER_URL="$(gcloud run services describe mermaid-renderer --region="
 # feedback on more drafts (the nightly eval-harness still re-grades the rest).
 # Each scored draft is ~6 extra judge calls, so this trades Vertex Eval quota
 # for coverage; raise toward 1.0 only if quota allows.
-EVAL_SAMPLE_RATE="${EVAL_SAMPLE_RATE:-0.5}"
+EVAL_SAMPLE_RATE="${EVAL_SAMPLE_RATE:-0.25}"
 
 # Forbid the silent MCP→pymongo fallback in deployed agents (agents/_mcp.py):
 # the agent image ships Node + mongodb-mcp-server, so a fallback there means
