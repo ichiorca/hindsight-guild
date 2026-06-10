@@ -43,10 +43,11 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Decisions",
     hint: "What needs your call today",
     items: [
-      // Daily-driver first: the Queue is the founder's #1 landing page.
-      { to: "/queue",         label: "Approval Queue", icon: Inbox,         description: "Decide on drafts" },
-      // The business-value rollup — what shipped, what it cost, what it saved.
+      // The dashboard leads: the business-value rollup (what shipped, what it
+      // cost, what it saved) is the landing page and the first thing in nav.
       { to: "/dashboard",     label: "Founder Dashboard", icon: TrendingUp, description: "ROI & impact" },
+      // The Queue is the founder's daily transactional driver — one below.
+      { to: "/queue",         label: "Approval Queue", icon: Inbox,         description: "Decide on drafts" },
       // Drafting is the create action — second so it's one click away.
       { to: "/draft",         label: "Drafting",       icon: PencilLine,    description: "Run the pipeline" },
       // Signals — auto-triggers that land in the queue with a Triggered-by chip.

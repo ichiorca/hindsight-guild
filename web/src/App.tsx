@@ -25,7 +25,7 @@ export default function App() {
       <ErrorBoundary>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/queue" replace />} />
+          <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard"     element={<FounderDashboard />} />
           <Route path="/queue"         element={<Queue />} />
           <Route path="/published"     element={<Published />} />
