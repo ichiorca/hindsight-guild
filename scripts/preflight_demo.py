@@ -64,6 +64,33 @@ def _warn(msg: str) -> None:
     print(f"  {YELLOW}WARN{RESET}  {msg}")
 
 
+def _bootstrap_mongo_uri() -> None:
+    """Make MONGO_URI_DIRECT available before anything resolves the URI.
+
+    Dev laptops are usually `gcloud auth login`-ed WITHOUT Application
+    Default Credentials, so the Secret Manager Python client fails with
+    DefaultCredentialsError. Fall back to the gcloud CLI (which has its own
+    credentials) to fetch the read-only URI, and export it so BOTH checks —
+    the pymongo vector probe and the MCP server subprocess (build_env) —
+    resolve the same way."""
+    if os.environ.get("MONGO_URI_DIRECT"):
+        return
+    import subprocess
+    project = os.environ.get("PROJECT_ID", "gen-lang-client-0079238279")
+    try:
+        uri = subprocess.run(
+            ["gcloud", "secrets", "versions", "access", "latest",
+             "--secret=mongo_uri_readonly", f"--project={project}"],
+            shell=(os.name == "nt"), capture_output=True, text=True,
+            check=True, timeout=30,
+        ).stdout.strip()
+        if uri and uri.lower() != "pending":
+            os.environ["MONGO_URI_DIRECT"] = uri
+            print(f"  (resolved mongo_uri_readonly via gcloud CLI, project {project})")
+    except Exception as e:  # noqa: BLE001 — checks below print the real fix
+        print(f"  (gcloud CLI secret fetch failed: {str(e)[:80]})")
+
+
 def _mongo_uri() -> str:
     # Same precedence as mongo/mcp_server.py + mongo/schema.py: direct
     # override first, then the read-only secret the agents themselves use.
@@ -241,6 +268,7 @@ def check_mcp() -> bool:
 
 def main() -> int:
     print("Hindsight Guild — demo preflight (vector money shot + MCP handshake)")
+    _bootstrap_mongo_uri()
     vector_ok = check_vector()
     mcp_ok = check_mcp()
 
