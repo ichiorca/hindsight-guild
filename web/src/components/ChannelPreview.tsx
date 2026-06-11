@@ -11,6 +11,42 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/**
+ * LinkedIn renders plain text only — mirror shared/integrations/linkedin.py's
+ * _strip_markdown so the preview shows exactly what ships (drafts sometimes
+ * arrive with markdown bold/bullets; the publish adapter strips them).
+ */
+function stripMarkdown(body: string): string {
+  let s = body || "";
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
+  s = s.replace(/^#{1,6}\s+/gm, "");
+  s = s.replace(/\*\*(.+?)\*\*/g, "$1");
+  s = s.replace(/(^|\s)\*(?!\s)(.+?)(?<!\s)\*(?=\s|$)/g, "$1$2");
+  s = s.replace(/^\s*\*\s+/gm, "• ");
+  s = s.replace(/__(.+?)__/g, "$1");
+  s = s.replace(/`+/g, "");
+  s = s.replace(/^>\s?/gm, "");
+  return s.trim();
+}
+
+/** Render `**bold**` spans inline; everything else verbatim. */
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  if (parts.length === 1) return text;
+  return parts.map((p, i) =>
+    p.startsWith("**") && p.endsWith("**")
+      ? <strong key={i}>{p.slice(2, -2)}</strong>
+      : p,
+  );
+}
+
+/** Bullet line in either markdown flavor (`- ` or `* `). */
+function bulletText(trimmed: string): string | null {
+  if (trimmed.startsWith("- ")) return trimmed.slice(2);
+  if (/^\*\s+/.test(trimmed)) return trimmed.replace(/^\*\s+/, "");
+  return null;
+}
+
 export interface PreviewImage {
   url: string | null;
   alt_text: string;
@@ -126,6 +162,7 @@ function ImageBlock({
 }
 
 function LinkedInPreview({ text, image, className }: { text: string; image?: PreviewImage | null; className?: string }) {
+  text = stripMarkdown(text);
   return (
     <div className={cn(
       "rounded-lg border bg-white text-[#1d2226] shadow-sm overflow-hidden",
@@ -254,11 +291,12 @@ function BlogPreview({ text, image, className }: { text: string; image?: Preview
       <div className="prose-memo px-8 py-6 max-w-none">
         {text.split("\n").map((line, i) => {
           const trimmed = line.trim();
-          if (trimmed.startsWith("## ")) return <h2 key={i}>{trimmed.slice(3)}</h2>;
-          if (trimmed.startsWith("# ")) return <h2 key={i} className="text-3xl mt-2">{trimmed.slice(2)}</h2>;
-          if (trimmed.startsWith("- ")) return <li key={i} className="ml-5 list-disc">{trimmed.slice(2)}</li>;
+          if (trimmed.startsWith("## ")) return <h2 key={i}>{renderInline(trimmed.slice(3))}</h2>;
+          if (trimmed.startsWith("# ")) return <h2 key={i} className="text-3xl mt-2">{renderInline(trimmed.slice(2))}</h2>;
+          const bullet = bulletText(trimmed);
+          if (bullet !== null) return <li key={i} className="ml-5 list-disc">{renderInline(bullet)}</li>;
           if (!trimmed) return <br key={i} />;
-          return <p key={i}>{trimmed}</p>;
+          return <p key={i}>{renderInline(trimmed)}</p>;
         })}
       </div>
     </div>
@@ -352,18 +390,21 @@ function SubstackPreview({ text, image, className }: { text: string; image?: Pre
             const trimmed = line.trim();
             if (!trimmed) return <div key={i} className="h-3" />;
             if (trimmed.startsWith("## "))
-              return <h2 key={i} className="font-serif text-[22px] font-semibold mt-7 mb-3">{trimmed.slice(3)}</h2>;
+              return <h2 key={i} className="font-serif text-[22px] font-semibold mt-7 mb-3">{renderInline(trimmed.slice(3))}</h2>;
             if (trimmed.startsWith("# "))
-              return <h2 key={i} className="font-serif text-[24px] font-semibold mt-7 mb-3">{trimmed.slice(2)}</h2>;
+              return <h2 key={i} className="font-serif text-[24px] font-semibold mt-7 mb-3">{renderInline(trimmed.slice(2))}</h2>;
             if (trimmed.startsWith("> "))
               return (
                 <blockquote key={i} className="border-l-4 border-[#ff6719] pl-4 my-4 italic text-muted-foreground">
-                  {trimmed.slice(2)}
+                  {renderInline(trimmed.slice(2))}
                 </blockquote>
               );
-            if (trimmed.startsWith("- "))
-              return <li key={i} className="ml-6 list-disc my-1">{trimmed.slice(2)}</li>;
-            return <p key={i} className="mb-4">{trimmed}</p>;
+            {
+              const bullet = bulletText(trimmed);
+              if (bullet !== null)
+                return <li key={i} className="ml-6 list-disc my-1">{renderInline(bullet)}</li>;
+            }
+            return <p key={i} className="mb-4">{renderInline(trimmed)}</p>;
           })}
         </div>
       </article>
@@ -415,9 +456,22 @@ function parseSubstackDraft(text: string): {
       };
     }
   } catch { /* not JSON, fall through */ }
-  // Heuristic: first non-empty line as headline, optional second line as subtitle
-  const lines = text.split("\n").map((l) => l.trim());
-  const nonEmpty = lines.filter(Boolean);
+  // Heuristic on markdown drafts. Drafts usually carry their title as a
+  // `# Heading` line (not always first — sometimes after a preamble). Use
+  // the first heading in the opening lines as the headline, WITHOUT the
+  // marker, and remove that line from the body so it isn't rendered twice.
+  const lines = text.split("\n");
+  const headingIdx = lines.findIndex(
+    (l, i) => i < 6 && /^#{1,3}\s+\S/.test(l.trim()),
+  );
+  if (headingIdx >= 0) {
+    const headline = lines[headingIdx].trim().replace(/^#{1,3}\s+/, "");
+    const body = [...lines.slice(0, headingIdx), ...lines.slice(headingIdx + 1)]
+      .join("\n").trim();
+    return { headline, body };
+  }
+  // No heading line — fall back to a short first line as the headline.
+  const nonEmpty = lines.map((l) => l.trim()).filter(Boolean);
   if (nonEmpty.length > 0 && nonEmpty[0].length < 100) {
     const headline = nonEmpty[0];
     const rest = text.slice(text.indexOf(headline) + headline.length).trim();
