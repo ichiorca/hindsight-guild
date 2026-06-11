@@ -30,7 +30,11 @@ app = Flask(__name__)
 PROJECT_ID = os.environ["PROJECT_ID"]
 REGION = os.environ.get("REGION", "us-central1")
 BQ = bigquery_client()
-_genai = genai.Client(vertexai=True, project=PROJECT_ID, location=REGION)
+# Honor the deploy's backend choice (Gemini 3 models are Developer-API-only
+# on this project; with vertexai=False the client uses GOOGLE_API_KEY).
+_USE_VERTEX = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "true").lower() in ("1", "true", "yes")
+_genai = (genai.Client(vertexai=True, project=PROJECT_ID, location=REGION)
+          if _USE_VERTEX else genai.Client())
 log = logging.getLogger(__name__)
 
 

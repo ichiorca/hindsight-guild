@@ -159,17 +159,22 @@ EVAL_SAMPLE_RATE="${EVAL_SAMPLE_RATE:-0.25}"
 # pymongo while the demo claims "agents read Atlas via MCP". Set to 0 to relax.
 MONGODB_REQUIRE_MCP="${MONGODB_REQUIRE_MCP:-1}"
 
-# Gemini backend per scope. The DRAFTING PIPELINE runs on the paid Gemini
-# Developer API (GOOGLE_API_KEY secret): billing-backed rate limits instead
-# of Vertex's dynamic shared quota, which 429'd drafting bursts on this
-# project. Everything else stays on Vertex (low volume; the Eval Service
-# judge is Vertex-only regardless). GOOGLE_GENAI_USE_VERTEXAI is set PER
-# SERVICE in 02-deploy-services.sh from these two knobs (it is NOT in the
-# GENAI bundle).
-USE_VERTEXAI_DEFAULT="${USE_VERTEXAI_DEFAULT:-true}"
+# Gemini backend per scope. ALL agents run on the paid Gemini Developer API
+# (GOOGLE_API_KEY secret): the Gemini 3 models (MODELS above) are served
+# there but NOT on this project's Vertex AI, and the paid key's rate limits
+# beat Vertex's dynamic shared quota (which 429'd drafting bursts) anyway.
+# GOOGLE_GENAI_USE_VERTEXAI is set PER SERVICE in 02-deploy-services.sh from
+# these knobs (it is NOT in the GENAI bundle).
+USE_VERTEXAI_DEFAULT="${USE_VERTEXAI_DEFAULT:-false}"
 PIPELINE_USE_VERTEXAI="${PIPELINE_USE_VERTEXAI:-false}"
 
-GENAI="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},EVAL_SAMPLE_RATE=${EVAL_SAMPLE_RATE},${MODELS}"
+# The Vertex AI Eval Service judge CANNOT move to the Developer API — pin it
+# to a model this project's Vertex actually serves (the 2.5 family), or the
+# inline eval + nightly eval-harness 404 once MODEL_LIGHT points at a 3.x
+# model. shared/rubrics.py reads JUDGE_MODEL before falling back to light().
+JUDGE_MODEL="${JUDGE_MODEL:-gemini-2.5-flash-lite}"
+
+GENAI="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},EVAL_SAMPLE_RATE=${EVAL_SAMPLE_RATE},JUDGE_MODEL=${JUDGE_MODEL},${MODELS}"
 
 # web-api reads analytics (rubric trend, weekly summary, live feed, skill
 # samples, founder dashboard) from BigQuery; Mongo remains the operational
