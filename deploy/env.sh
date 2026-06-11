@@ -165,7 +165,18 @@ EVAL_SAMPLE_RATE="${EVAL_SAMPLE_RATE:-0.25}"
 # pymongo while the demo claims "agents read Atlas via MCP". Set to 0 to relax.
 MONGODB_REQUIRE_MCP="${MONGODB_REQUIRE_MCP:-1}"
 
-GENAI="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},EVAL_SAMPLE_RATE=${EVAL_SAMPLE_RATE},${MODELS}"
+# Gemini backend per scope. The DRAFTING PIPELINE runs on the paid Gemini
+# Developer API (GOOGLE_API_KEY secret): billing-backed rate limits instead
+# of Vertex's dynamic shared quota, which 429'd drafting bursts on this
+# project. Everything else stays on Vertex (low volume; the Eval Service
+# judge is Vertex-only regardless). Validated 2026-06-11 on the
+# gemini-2.5-flash heavy tier — 2.5-pro hit Developer-API 503 timeouts on
+# long-form drafts. GOOGLE_GENAI_USE_VERTEXAI is set PER SERVICE in
+# 02-deploy-services.sh from these two knobs (it is NOT in the GENAI bundle).
+USE_VERTEXAI_DEFAULT="${USE_VERTEXAI_DEFAULT:-true}"
+PIPELINE_USE_VERTEXAI="${PIPELINE_USE_VERTEXAI:-false}"
+
+GENAI="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},MERMAID_RENDERER_URL=${MERMAID_RENDERER_URL},EVAL_SAMPLE_RATE=${EVAL_SAMPLE_RATE},${MODELS}"
 
 # web-api reads analytics (rubric trend, weekly summary, live feed, skill
 # samples, founder dashboard) from BigQuery; Mongo remains the operational

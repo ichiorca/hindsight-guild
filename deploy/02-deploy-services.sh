@@ -19,14 +19,18 @@ source "$(dirname "$0")/env.sh"
 echo "==> Deploying ${#A2A_APPS[@]} A2A agent services from agent-base:latest"
 for name in "${!A2A_APPS[@]}"; do
   app_attr="${A2A_APPS[$name]}"
-  echo "  -> a2a-${name//_/-}  (agents.a2a_server:${app_attr})"
+  # Pipeline drafts on the paid Gemini Developer API; specialists stay on
+  # Vertex — see the USE_VERTEXAI_* comment in env.sh.
+  use_vertex="$USE_VERTEXAI_DEFAULT"
+  if [ "$name" = "pipeline" ]; then use_vertex="$PIPELINE_USE_VERTEXAI"; fi
+  echo "  -> a2a-${name//_/-}  (agents.a2a_server:${app_attr}, vertexai=${use_vertex})"
   gcloud run deploy "a2a-${name//_/-}" \
     --image="$(image_ref agent-base)" \
     --command="uvicorn" \
     --args="agents.a2a_server:${app_attr},--host,0.0.0.0,--port,8080" \
     --region="$REGION" \
     --service-account="$SA" \
-    --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},MONGODB_REQUIRE_MCP=${MONGODB_REQUIRE_MCP},${GENAI}" \
+    --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},MONGODB_REQUIRE_MCP=${MONGODB_REQUIRE_MCP},GOOGLE_GENAI_USE_VERTEXAI=${use_vertex},${GENAI}" \
     --set-secrets="${GENAI_SECRETS}" \
     --memory=1Gi --cpu=1 \
     --no-allow-unauthenticated \
@@ -65,7 +69,7 @@ gcloud run deploy edit-capture-handler \
   --image="$(image_ref edit-capture-handler)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=${USE_VERTEXAI_DEFAULT},${GENAI}" \
     --set-secrets="${GENAI_SECRETS}" \
   --memory=512Mi \
   --allow-unauthenticated \
@@ -85,7 +89,7 @@ gcloud run deploy slack-approval-handler \
   --image="$(image_ref slack-approval-handler)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID},${GENAI}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},GOOGLE_GENAI_USE_VERTEXAI=${USE_VERTEXAI_DEFAULT},${GENAI}" \
     --set-secrets="${GENAI_SECRETS}" \
   --memory=256Mi \
   --allow-unauthenticated \
@@ -96,7 +100,7 @@ gcloud run deploy substack-publisher \
   --image="$(image_ref substack-publisher)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},${GENAI}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=${USE_VERTEXAI_DEFAULT},${GENAI}" \
     --set-secrets="${GENAI_SECRETS}" \
   --memory=512Mi \
   --no-allow-unauthenticated \
@@ -116,7 +120,7 @@ gcloud run deploy web-api \
   --image="$(image_ref web-api)" \
   --region="$REGION" \
   --service-account="$SA" \
-  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},WEB_API_USE_BQ=${WEB_API_USE_BQ},${GENAI}" \
+  --set-env-vars="PROJECT_ID=${PROJECT_ID},REGION=${REGION},WEB_API_USE_BQ=${WEB_API_USE_BQ},GOOGLE_GENAI_USE_VERTEXAI=${USE_VERTEXAI_DEFAULT},${GENAI}" \
     --set-secrets="${GENAI_SECRETS},HUBSPOT_API_TOKEN=hubspot_api_token:latest" \
   --memory=1Gi --cpu=1 \
   --allow-unauthenticated \
