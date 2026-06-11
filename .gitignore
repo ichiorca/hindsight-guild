@@ -96,3 +96,7 @@ docs/prds/
 
 # TypeScript incremental build artifact
 web/tsconfig.tsbuildinfo
+
+# Demo video — lives on YouTube, never in the repo (90MB)
+*.mp4
+*.mov
