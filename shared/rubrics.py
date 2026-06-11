@@ -372,6 +372,12 @@ def evaluate_batch(rows: list[dict],
     enriched: list[dict] = []
     for row in rows:
         out = dict(row)
+        # Same EvalTask quirk score_draft() works around: the service template
+        # carries a built-in "{response}" section, so EvalTask REQUIRES a
+        # `response` column even though our criteria reference {candidate}.
+        # Without it every metric aborts with "Cannot find the `response`
+        # column ..." and the whole nightly re-grade fails.
+        out.setdefault("response", out.get("candidate", ""))
         ch = row.get("channel")
         for r in rubrics:
             if r.needs_grounding and ch and r.rejection_category:

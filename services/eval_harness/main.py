@@ -45,6 +45,10 @@ def main():
     # vertexai.evaluation operates on a pandas DataFrame; rows must include
     # 'candidate' and may include channel + icp_description for the rubrics
     # that use them.
+    rows = [r for r in rows if _draft_text(r).strip()]
+    if not rows:
+        log.info("no drafts with text to re-evaluate")
+        return
     eval_inputs = [
         {
             "candidate": _draft_text(r),
@@ -76,12 +80,18 @@ def main():
 
 
 def _pull_yesterdays_drafts() -> list[dict]:
+    """Yesterday's drafts (the normal re-grade) PLUS any still-unscored draft
+    in the trailing window — inline eval is sampled, so most drafts arrive
+    with eval_scores NULL, and a missed night must not strand them forever."""
+    lookback = int(os.environ.get("EVAL_HARNESS_LOOKBACK_DAYS", "7"))
     sql = f"""
     SELECT telemetry_id, channel, raw
     FROM `{PROJECT_ID}.telemetry.actions`
     WHERE action_type LIKE 'draft_%'
-      AND DATE(ts) = CURRENT_DATE() - 1
       AND raw IS NOT NULL
+      AND (DATE(ts) = CURRENT_DATE() - 1
+           OR (eval_scores IS NULL
+               AND ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback} DAY)))
     LIMIT 500
     """
     return [dict(r) for r in BQ.query(sql).result()]
@@ -112,6 +122,17 @@ def _draft_text(row: dict) -> str:
 
 
 def _update_action_scores(telemetry_id: str, scores: dict[str, float]) -> None:
+    # Mongo `actions` is the operational mirror the approval queue reads —
+    # a BQ-only write leaves drafts looking unscored in the UI forever.
+    try:
+        from shared import mongo_tools
+        mongo_tools.use_secret("mongo_uri_writer")
+        mongo_tools.db()["actions"].update_many(
+            {"telemetry_id": telemetry_id},
+            {"$set": {"eval_scores": scores}},
+        )
+    except Exception as e:  # noqa: BLE001 — Mongo mirror is best-effort here
+        log.warning("mongo eval_scores mirror failed for %s: %s", telemetry_id, e)
     BQ.query(
         f"""
         UPDATE `{PROJECT_ID}.telemetry.actions`
