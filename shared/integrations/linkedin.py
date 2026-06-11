@@ -101,6 +101,9 @@ def _strip_markdown(body: str) -> str:
     s = re.sub(r"__(.+?)__", r"\1", s)
     s = re.sub(r"`+", "", s)
     s = re.sub(r"^>\s?", "", s, flags=re.MULTILINE)
+    # List markers: LinkedIn shows a literal '*'/'-' — render as a bullet dot
+    # (matches the queue preview's rendering in web/ChannelPreview.tsx).
+    s = re.sub(r"^\s*[*-]\s+", "• ", s, flags=re.MULTILINE)
     return s.strip()
 
 
