@@ -92,7 +92,7 @@ def make_llm_agent(
         model=resolved_model,
         # Robust function calling across model families (AUTO tool_config +
         # thinking disabled for gemini-2.5 to stop MALFORMED_FUNCTION_CALL).
-        generate_content_config=gen_content_config(resolved_model),
+        generate_content_config=gen_content_config(resolved_model, has_tools=bool(tools)),
         instruction=with_skills(
             instructions,
             allowed=allowed,

@@ -21,7 +21,7 @@ from agents._prompts import REVISER_INSTRUCTIONS
 reviser_agent = LlmAgent(
     name="reviser_agent",
     model=pick_model(HEAVY),   # heavy lift — same model as Content
-    generate_content_config=gen_content_config(pick_model(HEAVY)),
+    generate_content_config=gen_content_config(pick_model(HEAVY), has_tools=False),
     instruction=REVISER_INSTRUCTIONS,
     tools=[],
     output_key="draft",   # OVERWRITES Content's first-pass draft

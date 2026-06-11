@@ -79,7 +79,7 @@ def pick_model(default: str) -> str:
     return model_for(default)
 
 
-def gen_content_config(resolved_model: str):
+def gen_content_config(resolved_model: str, *, has_tools: bool = True):
     """A ``GenerateContentConfig`` that makes ADK function calling robust across
     Gemini model families. ``resolved_model`` is the concrete model name (post
     :func:`model_for`).
@@ -100,13 +100,18 @@ def gen_content_config(resolved_model: str):
     """
     from google.genai import types as t
 
-    cfg = t.GenerateContentConfig(
-        tool_config=t.ToolConfig(
+    # Only attach a function-calling config when the agent actually HAS
+    # tools. Vertex tolerates tool_config without function_declarations;
+    # the Gemini Developer API rejects it with 400 INVALID_ARGUMENT
+    # ("Function calling config is set without function_declarations"),
+    # which crashed the tool-less Reviser/AEO-Reviser stages mid-pipeline.
+    cfg = t.GenerateContentConfig()
+    if has_tools:
+        cfg.tool_config = t.ToolConfig(
             function_calling_config=t.FunctionCallingConfig(
                 mode=t.FunctionCallingConfigMode.AUTO,
             ),
-        ),
-    )
+        )
     m = str(resolved_model)
     if m.startswith("gemini-2.5"):
         # pro can't disable thinking; flash/-lite can.

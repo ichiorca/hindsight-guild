@@ -361,7 +361,7 @@ _reviser_telemetry_cb = make_after_callback(
 aeo_reviser_agent = LlmAgent(
     name="aeo_reviser",
     model=pick_model(HEAVY),   # same model as content/reviser — restructuring
-    generate_content_config=gen_content_config(pick_model(HEAVY)),
+    generate_content_config=gen_content_config(pick_model(HEAVY), has_tools=False),
     instruction=AEO_REVISER_INSTRUCTIONS,
     tools=[],
     output_key="draft",   # OVERWRITES content/reviser's draft
