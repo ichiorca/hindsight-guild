@@ -40,7 +40,7 @@ Who talks to the system, and what it leans on.
 flowchart TB
     Founder([👤 Solo Founder])
     SignalWorld([🌐 HN · Reddit · RSS])
-    Channels([📤 LinkedIn · Substack · Dev.to · Google/Meta Ads])
+    Channels([📤 LinkedIn · Substack · Dev.to · Google/Meta Ads · Email ESP drafts])
     AttrSrc([📈 GA4 · HubSpot · Google Ads · LinkedIn])
 
     subgraph HG["🏛️  Hindsight Guild"]
@@ -87,10 +87,10 @@ all with MongoDB as the ground truth and a hard **~$1k/mo** cost cap.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  ① PRESENTATION         React + Vite SPA · 12 routes · TanStack Query      │
+│  ① PRESENTATION         React + Vite SPA · 15 routes · TanStack Query      │
 │                         Firebase Hosting  →  /api,/media rewrites           │
 ├──────────────────────────────────────────────────────────────────────────┤
-│  ② API / EDGE           web-api (FastAPI) — 15 routers, the ONLY public    │
+│  ② API / EDGE           web-api (FastAPI) — 16 routers, the ONLY public    │
 │                         backend.  edit-capture · slack · substack handlers │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  ③ AGENT GUILD          13 ADK agents, each exposed over A2A (to_a2a)      │
@@ -115,7 +115,9 @@ all with MongoDB as the ground truth and a hard **~$1k/mo** cost cap.
 
 Key invariant: **agent reads go through the MongoDB MCP server; writes go through
 pymongo** so `mongo/history.py` can capture a pre-image + provenance on every
-mutation. (`MONGODB_USE_MCP=0` forces the pymongo fallback when Node is absent.)
+mutation. (`MONGODB_USE_MCP=0` forces the pymongo fallback when Node is absent;
+deployed agents set `MONGODB_REQUIRE_MCP=1`, so a broken MCP launch fails loudly
+instead of silently degrading to pymongo.)
 
 ---
 
@@ -183,10 +185,15 @@ flowchart TB
 | **Ops/QA** | `LlmAgent` | flash-lite | `ops_scan` | http_health_check, utm_parse |
 | **Self-Critique** | `LlmAgent` | flash | skill proposals | bigquery_query, `propose_skill_revision` |
 
-> **Models** — `gemini-3.5-flash` (heavy: Content, CMO, Email, Positioning, Paid,
-> Reviser, Self-Critique) vs `gemini-3.1-flash-lite` (cost-efficient: Research,
-> Review, Analytics, Ops, Voice, ImageBrief, Critique, rubric judge, edit classifier).
-> Selection lives in `agents/_models.py::pick_model`.
+> **Models** — agents name a TIER, never a model: `heavy` (Content, CMO, Email,
+> Positioning, Paid, Reviser, Self-Critique) vs `light` (Research, Review,
+> Analytics, Ops, Voice, ImageBrief, Critique, rubric judge, edit classifier).
+> Resolution lives in `shared/models.py::pick_model` (re-exported by
+> `agents/_models.py`), overridable per tier via `MODEL_HEAVY`/`MODEL_LIGHT`.
+> **The current deployment runs `gemini-2.5-flash` on both tiers** (see
+> `deploy/env.sh` — 2.5-pro's per-minute Vertex quota couldn't absorb a
+> pipeline burst). The "flash/flash-lite" labels in the diagram/table mean
+> heavy/light tier, not literal model ids.
 
 The **drafter → critique → reviser** split is a reusable pattern
 (`agents/_critique_factory.py`): the drafter assembles in state but does **not**
@@ -362,7 +369,8 @@ flowchart TB
     T --> O["outcome slots created<br/>filled async by outcome-attach"]
 ```
 
-**The 6 rubrics** (`shared/rubrics.py`, judge = `gemini-3.1-flash-lite`):
+**The 6 rubrics** (`shared/rubrics.py`, judge = the LIGHT model tier,
+`shared/models.py`):
 
 | Rubric | Checks | Quality floor? |
 |---|---|---|
@@ -471,7 +479,7 @@ flowchart TB
     end
 
     FB["🔥 Firebase Hosting<br/>/api,/media → web-api"]
-    SCHED["⏰ Cloud Scheduler ×11"]
+    SCHED["⏰ Cloud Scheduler ×13<br/>(11 jobs + 2 web-api endpoints)"]
     SM["🔐 Secret Manager"]
     GCS["🪣 GCS (media · snapshots)"]
 
@@ -514,25 +522,31 @@ Deploy (`deploy.yml`) is manual (`workflow_dispatch`), keyless via WIF.
 
 ## 10. Scheduled workers (cron map)
 
-11 Cloud Run Jobs wired to Cloud Scheduler (`deploy/env.sh`). The nightly chain is
-intentionally ordered: re-grade → roll up → detect drift → audit ops.
+11 Cloud Run Jobs + 2 web-api endpoint triggers wired to Cloud Scheduler
+(13 triggers total, `deploy/env.sh`). The nightly chain is intentionally
+ordered: re-grade → roll up → detect drift → audit ops.
 
 ```
    TIME (UTC)     JOB                     DOES                              WRITES
    ──────────     ───                     ────                              ──────
-   every 6h       outcome-attach          fill outcome slots from           experiments,
+   every 2d 03:00 outcome-attach          fill outcome slots from           experiments,
                                           GA4/HubSpot/Ads/LinkedIn          BQ outcomes
    every 6h :30   paid-media-sweep        A2A→Paid; pause losers            paid_variants,
                                           open stop-loss incidents          ops_incidents
    every 15m      substack-publish-sweep  retry stuck publishes             approvals
    hourly         snapshot-mongo          dump state.* → GCS (M0 safety)    gs://…-snapshots
    ╔═══ nightly chain ═══════════════════════════════════════════════════════════════╗
+   ║ 00:00        self-critique           run 5 miners → proposals          skills proposals,║
+   ║                                                                        self_critique_runs║
    ║ 03:00        eval-harness            re-grade all 6 rubrics            BQ eval_scores ║
    ║ 03:30        derive-track-records    per (skill,version) aggregates    derived.*      ║
    ║ 04:30        drift-detect            28d drop → open experiment        experiments    ║
    ║ 05:00        ops-qa-sweep            A2A→Ops; LP/UTM/pixel health      ops_incidents  ║
    ╚═════════════════════════════════════════════════════════════════════════════════════╝
-   Mon 09:00      self-critique           A2A→SC; mine 14d → proposals      skills proposals
+   daily 00:00    signal-watcher          poll HN/Reddit/RSS (web-api        signals
+                  (endpoint trigger)      POST /api/signals/poll-now)
+   daily 00:30    signal-router           route signals → draft jobs         actions (drafts)
+                  (endpoint trigger)      (POST /api/signals/route-now)
    Sun 22:00      positioning-review      A2A→Positioning; messaging        positioning_proposals
    Sun 23:00      promotion-gate          candidate vs incumbent → request  skills promotion_request
 ```
@@ -543,15 +557,17 @@ intentionally ordered: re-grade → roll up → detect drift → audit ops.
 
 React 18 + Vite 5 + TanStack Query 5 + Tailwind + Radix + Recharts. Served static
 from Firebase Hosting; all data via same-origin `/api` (rewritten to `web-api`).
-12 routes mirror the loops above.
+15 routes mirror the loops above (`/dashboard` is the landing page).
 
 ```
    NAV (web/src/lib/nav.ts)            BACKING ENDPOINTS (web/src/lib/api.ts)
    ───────────────────────            ─────────────────────────────────────
+   /dashboard    Founder ROI view  →  GET /founder-dashboard · /learning-curve
    /queue        Approval inbox    →  GET /queue · POST /decisions
+   /published    What shipped      →  GET /published
    /draft        Drafting engine   →  POST /draft → poll /draft/{id} · WS /ws/live
    /signals      Inbound triggers  →  GET /signals · /sources · POST /poll-now,/route-now
-   /learning     Closed-loop story →  GET /self-critique/summary,/proposals,/runs
+   /learning     Closed-loop story →  GET /self-critique/* · /learning-receipts
    /experiments  A/B registry      →  GET /experiments/{running,decided,drift}
    /skills       Playbook library  →  GET /skills · /{id}/{body,samples} · POST /promotion
    /voice        Customer quotes   →  GET /voice · /negatives
@@ -560,6 +576,7 @@ from Firebase Hosting; all data via same-origin `/api` (rewritten to `web-api`).
    /agents       Team roster+inbox →  GET /agents
    /live         Real-time ops     →  GET /live (+ refetch 8s)
    /weekly-review Monday ritual    →  GET /weekly-review (composite)
+   /admin        Cron control panel →  GET/POST /admin/crons (token-gated)
 ```
 
 **Signature components** that visualize the architecture:
@@ -600,6 +617,14 @@ sequenceDiagram
 
 ### Flow 2 — Approve → publish → attribute → learn (the long arc)
 
+> **Note:** the diagram below shows the **legacy Google-Sheet path**. The
+> canonical path today is the web UI: `POST /api/decisions` (queue.py) records
+> the decision AND owns publishing for **every** channel via
+> `shared/integrations.CHANNEL_ROUTES` — Dev.to, Substack (via the publisher
+> service), LinkedIn, paused Google/Meta ads, and email sequences (persisted to
+> `email_sequences` + staged as HubSpot drafts). The Sheet/edit-capture path
+> still works for decision capture + edit classification.
+
 ```mermaid
 sequenceDiagram
     actor F as Founder
@@ -634,7 +659,7 @@ sequenceDiagram
 | **MCP reads** | `mongodb-mcp-server` (`--readOnly` for read-scoped agents); JSON-Schema 2020-12→Draft-7 sanitized for ADK; pymongo fallback | `agents/_mcp.py`, `mongo/mcp_server.py` |
 | **Provenance / history** | pre-image + `_provenance` on every write; `supersedes[]` chain; `get_at()` time-travel | `mongo/history.py`, `shared/provenance.py` |
 | **Model Armor** | floor settings + template binding; `make_model_armor_callback` captures block decisions into telemetry | `agents/_common.py`, `scripts/create_model_armor_template.sh` |
-| **Vector search** | Atlas Automated Embedding (`autoEmbed`, `voyage-4-lite`, server-side); falls back to field-filter `find()` on M0 | `mongo/schema.py`, `agents/_mongodb_tools.py` |
+| **Vector search** | Atlas Automated Embedding (`autoEmbed`, `voyage-4-lite`, server-side); runs on M0 here, but the preview's embedding quota rate-limits under bulk inserts — tool falls back to field-filter `find()` on errors | `mongo/schema.py`, `agents/_mongodb_tools.py`, `scripts/preflight_demo.py` |
 | **Skills (3-tier)** | Tier-1 name+desc in prompt → Tier-2 `read_skill()` → Tier-3 `read_skill_reference()`; Mongo↔disk reconcile | `shared/skills.py`, `agents/_skills_config.py` |
 | **Evidence validation** | 3-tier claim check: approved_claims → customer_voice → web | `agents/_evidence_tool.py` |
 | **Image safety** | deterministic pre-gen check (public figures, trademarks, disallowed) before Imagen | `agents/_image_safety.py` |
@@ -668,7 +693,7 @@ hindsight-guild/
 │   ├── skills.py            3-tier skill loader + Mongo↔disk reconcile
 │   └── integrations/        GA4 · HubSpot · Google Ads · LinkedIn · Meta · Dev.to
 ├── services/            Cloud Run services + jobs
-│   ├── web_api/             FastAPI — 15 routers, the only public backend
+│   ├── web_api/             FastAPI — 16 routers, the only public backend
 │   ├── eval_harness · derive_track_records · drift_detect   (nightly chain)
 │   ├── self_critique · promotion_gate · positioning_review  (weekly learning)
 │   ├── outcome_attach · paid_media_sweep · ops_qa_sweep · snapshot_mongo

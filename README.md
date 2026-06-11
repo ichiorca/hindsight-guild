@@ -50,9 +50,10 @@ learn from its own history**, far beyond marketing.
    drafting.
 
 Approving a draft **takes action**: blog posts publish to Dev.to, newsletters
-to Substack, posts to LinkedIn, and ad variants land in Google/Meta Ads
-(paused, spend-safe) — then GA4/HubSpot/Ads outcomes flow back to close the
-loop.
+to Substack, posts to LinkedIn, ad variants land in Google/Meta Ads (paused,
+spend-safe), and email sequences persist to `email_sequences` + stage as
+HubSpot drafts (never auto-sent) — then GA4/HubSpot/Ads outcomes flow back to
+close the loop.
 
 Built around real ADK 1.x multi-agent primitives, the Agent2Agent protocol,
 Vertex AI Gen AI Evaluation Service, and Model Armor — with **MongoDB Atlas as
@@ -279,7 +280,7 @@ export PROJECT_ID=hindsight-guild-mvp REGION=us-central1 BILLING_ACCOUNT=<id>
 ./scripts/create_model_armor_template.sh  # floor + template + binding
 python mongo/seed.py                      # collections + vector index
 
-./deploy/all.sh                           # 16 images, 17 services, 11 jobs, 11 schedulers,
+./deploy/all.sh                           # 16 images, 17 services, 11 jobs, 13 schedulers,
                                           # IAM, + UI → Firebase Hosting
                                           # (see deploy/README.md for per-phase control)
 
@@ -337,11 +338,11 @@ skill-evolution) that exercise the live API + agents.
 ## Conventions
 
 - **Region:** `us-central1`. Atlas colocated.
-- **Models:** Gemini 3.5 Flash (frontier) for Content + CMO Planner + Lifecycle Email + Positioning + Paid Media + Self-Critique + Reviser; Gemini 3.1 Flash-Lite (cost-efficient) for Research, Review, Analytics, Ops/QA, Customer Voice, ImageBrief, Critique, rubric judge, edit classifier. Both GA on Vertex AI; `gemini-3-pro-preview` was discontinued 2026-03-26.
+- **Models:** two tiers, resolved centrally in `shared/models.py` (`HEAVY` for Content, CMO Planner, Lifecycle Email, Positioning, Paid Media, Self-Critique, Reviser; `LIGHT` for Research, Review, Analytics, Ops/QA, Customer Voice, ImageBrief, Critique, rubric judge, edit classifier). Agents name a tier, never a model. **This deployment runs `gemini-2.5-flash` on both tiers** (Vertex AI; `gemini-2.5-pro`'s per-minute quota couldn't absorb pipeline bursts — see `deploy/env.sh`). Point a better-quota project at stronger models with `MODEL_HEAVY` / `MODEL_LIGHT`, no code change.
 - **Secrets:** Never in code. All in Secret Manager.
 - **Data stores:** MongoDB Atlas is the **primary store** for transactional, reference, memory (`agent_lessons`), and skill data. BigQuery holds **telemetry/analytics only** (event log + derived views); operational reads default to Mongo (BQ behind opt-in flags).
 - **Mongo access:** Agent **reads** go through the MongoDB **MCP server** (`mongodb-mcp-server`, `--readOnly` for read-scoped agents); **writes** use pymongo so `mongo/history.py` can capture pre-images + provenance. Content + Review use `mongo_uri_readonly`; Research, CMO, workers use `mongo_uri_writer`. Atlas enforces server-side; falls back to pymongo if the MCP subprocess can't launch.
-- **Vector search:** Atlas **Automated Embedding** (`autoEmbed`, `voyage-4-lite` managed server-side) on `customer_voice`. No client-side embedding code and no Voyage API key; on M0 it falls back to a field-filter `find()`.
+- **Vector search:** Atlas **Automated Embedding** (`autoEmbed`, `voyage-4-lite` managed server-side) on `customer_voice`. No client-side embedding code and no Voyage API key. Runs on the M0 free tier in this deployment, but the preview's embedding quota is tight — bulk inserts can rate-limit query-time embedding for a while (the tool then falls back to a field-filter `find()`; `scripts/preflight_demo.py` verifies real `$vectorSearch` before a demo).
 - **Telemetry:** Every agent emits one row to Mongo `actions` (+ BigQuery `telemetry.actions`) via `after_agent_callback`. Outcome slots created at the same time, filled async by `services/outcome_attach`.
 - **Eval:** All 6 rubrics live, inline at draft time (Eval Service, sampled via `EVAL_SAMPLE_RATE`) + nightly all-6 re-grade by `eval_harness`. A curated **golden set** (`tests/golden/`) guards the harness contract in CI (cloud-free) and the live judge under `INTEGRATION_TEST=1`; `rubrics.passes_quality_floor` is the opt-in ship/hold gate (`EVAL_QUALITY_FLOOR`).
 - **Skills:** Versioned in Mongo (`skills.versions{}` + `current_version`); the self-critique → promotion-gate → founder-approval loop flips the active version, and `read_body()` reconciles the on-disk `SKILL.md` from Mongo.
@@ -351,8 +352,8 @@ skill-evolution) that exercise the live API + agents.
 ## Caveats — read before deploying
 
 - **ADK 1.x API drift:** Pinned versions in `pyproject.toml`. If `to_a2a` import path or `LlmAgent.output_key` shape differs in your install, see referenced docs.
-- **MongoDB MCP server needs Node:** The agent image ships Node + `mongodb-mcp-server` so reads run over MCP. Without Node (e.g. a bare dev laptop), agents fall back to pymongo automatically (`MONGODB_USE_MCP=0` forces it).
-- **Atlas Automated Embedding tier:** `autoEmbed` vector indexes are in public preview and may require a paid cluster tier; on the M0 free tier `mongodb_vector_search` falls back to a field-filter `find()`.
+- **MongoDB MCP server needs Node:** The agent image ships Node + `mongodb-mcp-server` so reads run over MCP. Without Node (e.g. a bare dev laptop), agents fall back to pymongo automatically (`MONGODB_USE_MCP=0` forces it). Deployed agents set `MONGODB_REQUIRE_MCP=1` (deploy default), which **forbids** that silent fallback — a broken MCP launch fails loudly instead.
+- **Atlas Automated Embedding quota:** `autoEmbed` is public preview and works on this deployment's M0 free tier, but the embedding provider rate-limits aggressively — a bulk insert into the indexed collection can exhaust the quota and temporarily break query-time embedding too (observed ~75-min recovery). `mongodb_vector_search` falls back to a field-filter `find()` on errors; run `scripts/preflight_demo.py` before anything that depends on live vector search.
 - **Vertex AI Eval Service usage:** Counted toward your project quota. Synchronous calls at draft time are sampled (`EVAL_SAMPLE_RATE`, default 0.25) + nightly batch; the live golden-set test (`INTEGRATION_TEST=1`) also spends quota (~6 calls/draft).
 - **Model Armor flag drift:** Floor-settings + template binding flags may differ slightly across `gcloud` versions. Verify against the docs linked in `scripts/create_model_armor_template.sh`.
 - **A2A service auth:** Deployed with `--no-allow-unauthenticated`. Configure caller IAM bindings (`gcloud run services add-iam-policy-binding`) so workers can invoke agents.

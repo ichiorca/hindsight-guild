@@ -15,8 +15,8 @@ push-button; everything below is the groundwork it assumes already exists.
 | Public website (React SPA) | **Firebase Hosting** | `firebase.json` rewrites `/api/**` + `/media/**` to the `web-api` Cloud Run service, so the app is same-origin. Default URL `https://<project>.web.app`. |
 | API + UI backend | **Cloud Run** `web-api` (public) | FastAPI. The only public backend. |
 | Agents | **Cloud Run** `a2a-*` ×13 (private) | One image (`agent-base`), different ASGI target each. Reached only by `sa-agents`. |
-| Webhooks | **Cloud Run** `edit-capture-handler`, `slack-approval-handler` (public), `substack-publisher` (private) | |
-| Cron workers | **Cloud Run Jobs** ×11 + **Cloud Scheduler** | Schedules live in `deploy/env.sh`. |
+| Webhooks / helpers | **Cloud Run** `edit-capture-handler`, `slack-approval-handler` (public), `substack-publisher`, `mermaid-renderer` (private) | `mermaid-renderer` ships its own Dockerfile, deployed outside the cloudbuild fan-out. |
+| Cron workers | **Cloud Run Jobs** ×11 + **Cloud Scheduler** ×13 (11 job triggers + 2 web-api signal-endpoint triggers) | Schedules live in `deploy/env.sh`. |
 | Images | **Artifact Registry** repo `hindsight-guild` | Built in parallel by **Cloud Build** (`cloudbuild.yaml`). |
 | Config + credentials | **Secret Manager** | Every token/URI. Code reads `PENDING` as "not configured". |
 | Primary datastore | **MongoDB Atlas** (external) | DB name `hindsight_guild`. |
@@ -130,8 +130,11 @@ printf '%s' 'THE-REAL-VALUE' | gcloud secrets versions add <name> --data-file=- 
 | `slack_webhook_url` | CMO planner approvals → Slack | if using Slack |
 | `ga4_property_id`, `hubspot_api_token` | outcome attribution | if using those sources |
 | `google_ads_developer_token`, `google_ads_client_id`, `google_ads_client_secret`, `google_ads_refresh_token`, `google_ads_login_customer_id` | paid-media + Ads attribution | if using Google Ads |
-| `linkedin_access_token` | LinkedIn outcomes | optional |
+| `linkedin_access_token` | LinkedIn publishing + outcomes | optional |
 | `substack_api_key`, `substack_publication_host`, `substack_publication_id` | Substack publishing | if publishing to Substack |
+| `devto_api_key` | blog-channel publishing (Dev.to) | if publishing blogs |
+| `hubspot_api_token` | also stages approved email sequences as HubSpot **drafts** (never auto-sent) | if using email staging |
+| `admin_seed_token` | locks the `/api/admin/*` cron panel + seed endpoint (open when unset) | recommended |
 
 `a2a_url_*`, `edit_capture_handler_url`, `substack_publisher_url` are written
 **automatically** by the deploy (🤖) — leave them.

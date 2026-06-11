@@ -21,9 +21,11 @@ Resolution order for a tier
   3. Built-in default (below).
 
 Defaults are GA on Vertex AI for the AI-Studio-style ``gen-lang-client-*``
-projects (gemini-3.x is not available there). A project WITH 3.x access just
-sets ``MODEL_HEAVY=gemini-3.5-flash`` / ``MODEL_LIGHT=gemini-3.1-flash-lite``
-in its deploy env — no code change.
+projects (gemini-3.x is not available there). The current deploy
+(``deploy/env.sh``) pins BOTH tiers to ``gemini-2.5-flash`` — 2.5-pro's
+per-minute Vertex quota 429'd pipeline bursts. A project with more quota
+(or 3.x access) just sets ``MODEL_HEAVY``/``MODEL_LIGHT`` in its deploy
+env — no code change.
 """
 from __future__ import annotations
 
