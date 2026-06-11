@@ -49,7 +49,10 @@ not opinion.
 _web_search_agent = LlmAgent(
     name="web_search",
     model=pick_model(LIGHT),
-    generate_content_config=gen_content_config(pick_model(LIGHT)),
+    # google_search is a BUILT-IN tool, not a function declaration — a
+    # function_calling_config alongside it 400s on the Developer API
+    # ("Function calling config is set without function_declarations").
+    generate_content_config=gen_content_config(pick_model(LIGHT), has_tools=False),
     description=(
         "Web-search specialist. Call this when you need recent / current "
         "information that wouldn't be in our local data (latest "
