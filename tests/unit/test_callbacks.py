@@ -47,7 +47,11 @@ def test_model_armor_callback_records_allow_and_caches_text():
     assert ctx.state["_last_output"] == "Here is your draft."
 
 
-def test_after_callback_emits_telemetry_with_eval_scores():
+def test_after_callback_emits_telemetry_with_eval_scores(monkeypatch):
+    # Inline eval is SAMPLED (EVAL_SAMPLE_RATE, deterministic on the random
+    # telemetry_id) — pin it to 1 so this test always exercises the scored
+    # path instead of failing ~3 runs in 4 when the draft samples out.
+    monkeypatch.setenv("EVAL_SAMPLE_RATE", "1")
     cb = make_after_callback(
         agent_name="content_agent",
         skill_id="linkedin_post",
@@ -61,10 +65,12 @@ def test_after_callback_emits_telemetry_with_eval_scores():
         "model_armor": {"decision": "allow", "categories": []},
     })
 
+    # score_draft(..., return_explanations=True) returns (scores, explanations).
     with patch("agents._common.score_draft",
-                return_value={"brand_voice": 0.8, "claim_support": 0.9,
-                              "claim_risk": 0.85, "icp_relevance": 0.7,
-                              "originality": 0.75, "conversion_intent": 0.65}) as m_score, \
+                return_value=({"brand_voice": 0.8, "claim_support": 0.9,
+                               "claim_risk": 0.85, "icp_relevance": 0.7,
+                               "originality": 0.75, "conversion_intent": 0.65},
+                              {"brand_voice": "concise, evidence-led"})) as m_score, \
          patch("agents._common.emit_action", return_value="act_abc") as m_emit:
         cb(ctx)
 
