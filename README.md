@@ -4,7 +4,7 @@
 Built on Gemini + Google Cloud Agent Builder + MongoDB Atlas.
 
 🌐 **Live app:** <https://hindsight-guild.web.app> ·
-▶ **3-min demo video:** 〈YouTube link — added at submission〉 ·
+▶ **3-min demo video:** <https://youtu.be/Ky3HB259tOc> ·
 🏆 **Track:** MongoDB · 📄 Apache-2.0
 
 Hindsight Guild is an autonomous marketing team for **solo founders**: a guild
