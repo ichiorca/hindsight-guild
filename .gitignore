@@ -90,3 +90,9 @@ drafts/media/
 # =============================================================================
 docs/DEMO_SCRIPT.md
 docs/DEVPOST.md
+
+# Product specs — kept local, not part of the public submission
+docs/prds/
+
+# TypeScript incremental build artifact
+web/tsconfig.tsbuildinfo
