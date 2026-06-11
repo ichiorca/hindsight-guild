@@ -526,6 +526,14 @@ def _try_publish_for_channel(d: Decision, actor_id: str, now: datetime) -> dict:
         return {"status": "skipped", "reason": "no approved text"}
 
     channel = (d.channel or "").lower()
+    if channel == "linkedin_article":
+        # LinkedIn has no public API for creating ARTICLES (only UGC posts).
+        # The approval is saved; the founder pastes the draft into LinkedIn's
+        # article editor. An honest skip beats a fake publish.
+        return {"status": "skipped", "platform": "linkedin",
+                "reason": ("LinkedIn articles can't be created via the API — "
+                           "paste the approved draft into LinkedIn's article "
+                           "editor")}
     if channel not in CHANNEL_ROUTES:
         return {"status": "no_route", "channel": channel}
 

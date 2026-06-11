@@ -1058,8 +1058,10 @@ What to evaluate:
    CTA. This is the #1 recurring miss — drafts keep scoring at the floor on
    conversion_intent because they trail off without a clear ask.
 
-7. **Length + structure**. Substack 1100–1800 words; LinkedIn under
-   1300 chars; Email under 300 words; Blog outline ≥ 4 H2 sections.
+7. **Length + structure**. Substack 1100–1800 words; LinkedIn POST under
+   1300 chars (hard platform limit 3000 — over that it cannot publish);
+   LinkedIn ARTICLE (channel linkedin_article) 800–1500 words opening with a
+   `# Title` H1; Email under 300 words; Blog outline ≥ 4 H2 sections.
 
 OUTPUT — a single JSON object, this becomes state["critique"]:
 {{

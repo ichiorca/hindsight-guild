@@ -69,7 +69,7 @@ log = logging.getLogger(__name__)
 # lifecycle_email matched BEFORE bare "email" so the more specific channel wins.
 # Same for *_ads platforms vs the generic "ads".
 _CHANNEL_RE = re.compile(
-    r"\b(lifecycle_email|google_ads|meta_ads|linkedin_ads|linkedin|email|blog|substack)\b",
+    r"\b(lifecycle_email|google_ads|meta_ads|linkedin_ads|linkedin_article|linkedin|email|blog|substack)\b",
     re.IGNORECASE,
 )
 _ICP_RE = re.compile(r"targeting\s+([a-z_][a-z0-9_]+)", re.IGNORECASE)
@@ -85,6 +85,10 @@ _VISUAL_RE = re.compile(
 )
 _SKILL_BY_CHANNEL = {
     "linkedin":        "linkedin_post",
+    # Long-form LinkedIn ARTICLE (distinct from a feed post): no public API
+    # to create articles, so approval saves the draft for manual paste; the
+    # long-form blog playbook is the closest fit for drafting guidance.
+    "linkedin_article": "blog_outline",
     "email":           "nurture_email",
     "blog":            "blog_outline",
     "substack":        "substack_post",

@@ -87,6 +87,7 @@ export function ChannelPreview({ channel, text, subject, image, images, classNam
   const primary = imgs[0] ?? null;
   const inner =
     channel === "linkedin" ? <LinkedInPreview text={text} image={primary} className={className} />
+    : channel === "linkedin_article" ? <LinkedInArticlePreview text={text} image={primary} className={className} />
     : channel === "email" ? <EmailPreview text={text} subject={subject} image={primary} className={className} />
     : channel === "blog" ? <BlogPreview text={text} image={primary} className={className} />
     : channel === "substack" ? <SubstackPreview text={text} image={primary} className={className} />
@@ -158,6 +159,26 @@ function ImageBlock({
   );
 }
 
+// LinkedIn POST limits: ~1,300 chars is the feed "see more" fold guidance;
+// 3,000 is the hard platform limit a publish cannot exceed.
+const LINKEDIN_POST_FOLD = 1300;
+const LINKEDIN_POST_MAX = 3000;
+
+function LinkedInPostLengthBar({ chars }: { chars: number }) {
+  const over = chars > LINKEDIN_POST_MAX;
+  const longish = !over && chars > LINKEDIN_POST_FOLD;
+  return (
+    <div className={cn(
+      "px-4 py-2 border-t border-[#e6e9ec] dark:border-[#38434f] text-[11px] tabular-nums",
+      over ? "text-destructive font-medium" : "text-[#666] dark:text-[#a0a8af]",
+    )}>
+      {chars.toLocaleString()} / {LINKEDIN_POST_MAX.toLocaleString()} chars
+      {over && " — exceeds LinkedIn's post limit; trim it, or draft as a LinkedIn article"}
+      {longish && ` — above the ~${LINKEDIN_POST_FOLD.toLocaleString()}-char "see more" fold`}
+    </div>
+  );
+}
+
 function LinkedInPreview({ text, image, className }: { text: string; image?: PreviewImage | null; className?: string }) {
   text = stripMarkdown(text);
   return (
@@ -186,6 +207,58 @@ function LinkedInPreview({ text, image, className }: { text: string; image?: Pre
           <ImageBlock image={image} aspect="1/1" rounded={false} />
         </div>
       )}
+      <LinkedInPostLengthBar chars={text.length} />
+    </div>
+  );
+}
+
+/**
+ * LinkedIn ARTICLE — long-form, distinct from a feed post (no char cap, but
+ * LinkedIn's API can't create articles: approval saves the draft for manual
+ * paste into the LinkedIn editor). Renders title + prose like the editor.
+ */
+function LinkedInArticlePreview({ text, image, className }: { text: string; image?: PreviewImage | null; className?: string }) {
+  const { title, body } = parseBlogDraft(text);
+  const words = body.trim().split(/\s+/).length;
+  return (
+    <div className={cn(
+      "rounded-lg border bg-white text-[#1d2226] shadow-sm overflow-hidden",
+      "dark:bg-[#1b1f23] dark:text-[#f3f6f8] dark:border-[#38434f]",
+      className,
+    )}>
+      <div className="px-6 pt-4 text-[11px] uppercase tracking-wider text-[#666] dark:text-[#a0a8af] font-medium">
+        LinkedIn article · {words.toLocaleString()} words · published manually via LinkedIn's editor
+      </div>
+      {image && (
+        <div className="mt-3 border-y border-[#e6e9ec] dark:border-[#38434f]">
+          <ImageBlock image={image} aspect="16/9" rounded={false} />
+        </div>
+      )}
+      <div className="px-6 py-5">
+        <h1 className="text-[26px] font-bold leading-tight tracking-tight">{title}</h1>
+        <div className="flex items-center gap-2 mt-3 mb-5 pb-4 border-b border-[#e6e9ec] dark:border-[#38434f] text-[12px] text-[#666] dark:text-[#a0a8af]">
+          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#0a66c2] to-[#004182] flex items-center justify-center text-white font-semibold text-[11px]">
+            YOU
+          </div>
+          <span className="font-semibold text-[#1d2226] dark:text-[#f3f6f8]">Founder</span>
+          <span>·</span>
+          <span>Solo founder · building in public</span>
+        </div>
+        <div className="text-[15px] leading-[1.6]">
+          {body.split("\n").map((line, i) => {
+            const trimmed = line.trim();
+            if (!trimmed) return <div key={i} className="h-3" />;
+            if (trimmed.startsWith("## "))
+              return <h2 key={i} className="text-[20px] font-semibold mt-6 mb-2">{renderInline(trimmed.slice(3))}</h2>;
+            if (trimmed.startsWith("# "))
+              return <h2 key={i} className="text-[22px] font-semibold mt-6 mb-2">{renderInline(trimmed.slice(2))}</h2>;
+            const bullet = bulletText(trimmed);
+            if (bullet !== null)
+              return <li key={i} className="ml-6 list-disc my-1">{renderInline(bullet)}</li>;
+            return <p key={i} className="mb-3">{renderInline(trimmed)}</p>;
+          })}
+        </div>
+      </div>
     </div>
   );
 }

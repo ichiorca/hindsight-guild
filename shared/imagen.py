@@ -65,6 +65,7 @@ class GeneratedImage:
 # generated asset fits the publishing surface without per-channel rework.
 CHANNEL_ASPECT: dict[str, AspectRatio] = {
     "linkedin": "1:1",       # square works for both feed and DMs
+    "linkedin_article": "16:9",  # article cover image
     "email":    "16:9",      # email header banner
     "blog":     "16:9",      # blog hero
     "substack": "16:9",      # newsletter featured image

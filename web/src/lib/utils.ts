@@ -70,7 +70,8 @@ export const CHANNELS: Array<{
   description: string;
   group?: "organic" | "lifecycle" | "paid";
 }> = [
-  { id: "linkedin",      label: "LinkedIn post → LinkedIn",       description: "Long-form feed post — 1300 char ceiling. Publishes to LinkedIn on approval.",       group: "organic" },
+  { id: "linkedin",      label: "LinkedIn post → LinkedIn",       description: "Feed post — aim under 1,300 chars (the see-more fold); hard platform limit 3,000. Publishes to LinkedIn on approval.", group: "organic" },
+  { id: "linkedin_article", label: "LinkedIn article",            description: "Long-form article (800–1,500 words, # Title first). LinkedIn's API can't create articles — approved drafts are pasted into the LinkedIn editor manually.", group: "organic" },
   { id: "blog",          label: "Blog outline → Dev.to",          description: "Structured long-form post. Publishes to Dev.to on approval.",                       group: "organic" },
   { id: "substack",      label: "Substack newsletter → Substack", description: "Headline + subtitle + markdown body. Publishes to Substack on approval.",            group: "organic" },
   { id: "email",         label: "One-off email",                  description: "Single mid-funnel campaign send (drafted, not auto-published)",                      group: "organic" },
