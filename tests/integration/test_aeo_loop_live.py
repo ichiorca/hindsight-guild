@@ -3,10 +3,10 @@ on Gemini against a deliberately low-AEO draft.
 
 Opt-in (LLM cost + network). Needs GOOGLE_API_KEY in .env (loaded by
 scripts._test_bootstrap) and a local Mongo for the audit/inject side-effects.
-Because pick_model resolves at import time and the gemini-3.x defaults aren't on
-the AI-Studio key, set LOCAL_OVERRIDE_MODEL to a Developer-API model.
+Because pick_model resolves at import time and a free-tier AI-Studio key
+rate-limits the heavy default, pin LOCAL_OVERRIDE_MODEL to a cheap model.
 
-    GOOGLE_GENAI_USE_VERTEXAI=0 LOCAL_OVERRIDE_MODEL=gemini-2.5-flash \
+    GOOGLE_GENAI_USE_VERTEXAI=0 LOCAL_OVERRIDE_MODEL=gemini-3.1-flash-lite \
     AEO_LIVE_TEST=1 MONGO_URI_DIRECT="mongodb://localhost:27017" \
     python -m pytest tests/integration/test_aeo_loop_live.py -q -s
 
@@ -108,8 +108,8 @@ def test_aeo_loop_scores_and_revises_live():
         return final.state if final else {}
 
     # Capture every scorer pass that produced a complete sub_signals dict.
-    # (LLMs can degrade on later loop turns — esp. the local gemini-2.5-flash
-    # override vs prod gemini-3.x — so we assert on the live scorer's real work,
+    # (LLMs can degrade on later loop turns — esp. a cheap local override
+    # model vs the prod tiers — so we assert on the live scorer's real work,
     # not the possibly-degraded final state.)
     passes: list[tuple[dict, float]] = []
     _orig_composite = A._composite

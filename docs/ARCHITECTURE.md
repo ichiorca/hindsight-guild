@@ -190,10 +190,10 @@ flowchart TB
 > Analytics, Ops, Voice, ImageBrief, Critique, rubric judge, edit classifier).
 > Resolution lives in `shared/models.py::pick_model` (re-exported by
 > `agents/_models.py`), overridable per tier via `MODEL_HEAVY`/`MODEL_LIGHT`.
-> **The current deployment runs `gemini-2.5-flash` on both tiers** (see
-> `deploy/env.sh` — 2.5-pro's per-minute Vertex quota couldn't absorb a
-> pipeline burst). The "flash/flash-lite" labels in the diagram/table mean
-> heavy/light tier, not literal model ids.
+> **The deployment runs Gemini 3** — `gemini-3.5-flash` (heavy) +
+> `gemini-3.1-flash-lite` (light); see `deploy/env.sh`. The
+> "flash/flash-lite" labels in the diagram/table mean heavy/light tier, not
+> literal model ids.
 
 The **drafter → critique → reviser** split is a reusable pattern
 (`agents/_critique_factory.py`): the drafter assembles in state but does **not**

@@ -747,7 +747,7 @@ interface DraftJob {
 const DRAFT_POLL_INTERVAL_MS = 2_000;
 // ~8 min ceiling. Must exceed the web-api → pipeline read timeout (300s in
 // services/web_api/routers/drafting.py) so the UI sees the final done/failed
-// state rather than giving up early — gemini-2.5-pro drafts run ~4-5 min,
+// state rather than giving up early — heavy-tier drafts can run ~4-5 min,
 // longer on a cold start.
 const DRAFT_POLL_MAX_ATTEMPTS = 240;
 // A 4-5 min draft makes ~150 poll requests through Firebase Hosting → Cloud

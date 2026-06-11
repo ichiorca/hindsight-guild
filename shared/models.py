@@ -20,12 +20,10 @@ Resolution order for a tier
   2. ``MODEL_HEAVY`` / ``MODEL_LIGHT`` — per-tier override.
   3. Built-in default (below).
 
-Defaults are GA on Vertex AI for the AI-Studio-style ``gen-lang-client-*``
-projects (gemini-3.x is not available there). The current deploy
-(``deploy/env.sh``) pins BOTH tiers to ``gemini-2.5-flash`` — 2.5-pro's
-per-minute Vertex quota 429'd pipeline bursts. A project with more quota
-(or 3.x access) just sets ``MODEL_HEAVY``/``MODEL_LIGHT`` in its deploy
-env — no code change.
+Defaults are the Gemini 3 generation — GA on both Vertex AI and the Gemini
+Developer API. The deploy (``deploy/env.sh``) sets both tiers explicitly; a
+project that needs different models just sets ``MODEL_HEAVY``/``MODEL_LIGHT``
+in its deploy env — no code change.
 """
 from __future__ import annotations
 
@@ -36,8 +34,8 @@ LIGHT = "light"
 
 # The only model literals in the codebase live here.
 _DEFAULTS = {
-    HEAVY: "gemini-2.5-flash",
-    LIGHT: "gemini-2.5-flash-lite",
+    HEAVY: "gemini-3.5-flash",
+    LIGHT: "gemini-3.1-flash-lite",
 }
 _ENV_VAR = {HEAVY: "MODEL_HEAVY", LIGHT: "MODEL_LIGHT"}
 

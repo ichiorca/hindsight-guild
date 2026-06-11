@@ -1,7 +1,7 @@
 # Hindsight Guild
 
 **A marketing team of one's own — that remembers, learns, and levels up.**
-Built on Gemini + Google Cloud Agent Builder + MongoDB Atlas.
+Built on Gemini 3 + Google Cloud Agent Builder + MongoDB Atlas.
 
 🌐 **Live app:** <https://hindsight-guild.web.app> ·
 ▶ **3-min demo video:** <https://youtu.be/Ky3HB259tOc> ·
@@ -254,7 +254,7 @@ the real primitive:
 | Rubric harness | 2 hand-rolled Gemini calls | Vertex AI Eval Service, all 6 PointwiseMetric rubrics + golden-set regression gate |
 | Self-learning loop | inline 2-rubric scoring only | nightly all-6-rubric re-grade (`eval_harness`) + weekly `promotion_gate` |
 | HubSpot / GA / LI handlers | `return None` | Real REST + GAQL + BQ-export queries with tenacity retry |
-| Edit classifier | regex heuristic | Gemini-2.5-Flash structured output |
+| Edit classifier | regex heuristic | Gemini structured output (LIGHT tier) |
 | Model Armor | template only | floor settings + VERTEX_AI integration + template binding |
 | Analytics agent | absent | Real LlmAgent used by CMO via AgentTool |
 | DECISIONS.md | created unilaterally | removed |
@@ -338,7 +338,7 @@ skill-evolution) that exercise the live API + agents.
 ## Conventions
 
 - **Region:** `us-central1`. Atlas colocated.
-- **Models:** two tiers, resolved centrally in `shared/models.py` (`HEAVY` for Content, CMO Planner, Lifecycle Email, Positioning, Paid Media, Self-Critique, Reviser; `LIGHT` for Research, Review, Analytics, Ops/QA, Customer Voice, ImageBrief, Critique, rubric judge, edit classifier). Agents name a tier, never a model. **This deployment runs `gemini-2.5-flash` on both tiers** (Vertex AI; `gemini-2.5-pro`'s per-minute quota couldn't absorb pipeline bursts — see `deploy/env.sh`). Point a better-quota project at stronger models with `MODEL_HEAVY` / `MODEL_LIGHT`, no code change.
+- **Models:** two tiers, resolved centrally in `shared/models.py` (`HEAVY` for Content, CMO Planner, Lifecycle Email, Positioning, Paid Media, Self-Critique, Reviser; `LIGHT` for Research, Review, Analytics, Ops/QA, Customer Voice, ImageBrief, Critique, rubric judge, edit classifier). Agents name a tier, never a model. **This deployment runs Gemini 3: `gemini-3.5-flash` on the heavy tier and `gemini-3.1-flash-lite` on the light tier** (see `deploy/env.sh`). Retarget either tier with `MODEL_HEAVY` / `MODEL_LIGHT`, no code change.
 - **Secrets:** Never in code. All in Secret Manager.
 - **Data stores:** MongoDB Atlas is the **primary store** for transactional, reference, memory (`agent_lessons`), and skill data. BigQuery holds **telemetry/analytics only** (event log + derived views); operational reads default to Mongo (BQ behind opt-in flags).
 - **Mongo access:** Agent **reads** go through the MongoDB **MCP server** (`mongodb-mcp-server`, `--readOnly` for read-scoped agents); **writes** use pymongo so `mongo/history.py` can capture pre-images + provenance. Content + Review use `mongo_uri_readonly`; Research, CMO, workers use `mongo_uri_writer`. Atlas enforces server-side; falls back to pymongo if the MCP subprocess can't launch.

@@ -131,16 +131,10 @@ SECRETS_FOR_AGENTS=(
 
 # Model tiers — resolved centrally in shared/models.py (HEAVY/LIGHT). Set them
 # here to point a deployment at whatever its endpoint serves. Defaults are the
-# most capable models callable on this project's Vertex: gemini-2.5-pro (heavy)
-# + gemini-2.5-flash (light). The Developer API also serves the gemini-3.x
-# family, but its free-tier rate limits made the multi-agent pipeline time out
-# (ReadTimeout > 300s), so we run on Vertex (SA quotas). The gemini-2.5
-# thinking/function-call quirk is handled in shared/models.gen_content_config.
-# Demo-window default: gemini-2.5-flash on the heavy tier too. 2.5-pro's
-# per-minute Vertex quota 429'd live drafting bursts (pipeline = several
-# sequential heavy calls + sampled 6-rubric eval); flash has the headroom.
-# Export MODEL_HEAVY=gemini-2.5-pro to restore the pro tier post-hackathon.
-MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-2.5-flash},MODEL_LIGHT=${MODEL_LIGHT:-gemini-2.5-flash}"
+# Gemini 3 generation: gemini-3.5-flash (heavy) + gemini-3.1-flash-lite
+# (light), GA on both Vertex AI and the Gemini Developer API. Override with
+# MODEL_HEAVY / MODEL_LIGHT — no code change.
+MODELS="MODEL_HEAVY=${MODEL_HEAVY:-gemini-3.5-flash},MODEL_LIGHT=${MODEL_LIGHT:-gemini-3.1-flash-lite}"
 
 # Diagram renderer URL — shared/diagrams.py reads MERMAID_RENDERER_URL to render
 # infographic/excalidraw diagrams (image_brief). Resolved from the live
@@ -150,7 +144,7 @@ MERMAID_RENDERER_URL="$(gcloud run services describe mermaid-renderer --region="
 
 # genai client config for the agents. USE_VERTEXAI=true -> Vertex AI (SA-based;
 # no API key needed). GOOGLE_API_KEY is still mounted (GENAI_SECRETS) but is
-# ignored while USE_VERTEXAI=true, so flipping to the Developer API + gemini-3.x
+# ignored while USE_VERTEXAI=true, so flipping a scope to the Developer API
 # is a one-line change. The Vertex AI Eval service (shared/rubrics.py) runs here.
 # Inline rubric-scoring sample rate (agents/_common._should_eval). 0.5 = score
 # 1-in-2 drafts at draft time so the founder sees eval scores + reviewer
@@ -169,10 +163,9 @@ MONGODB_REQUIRE_MCP="${MONGODB_REQUIRE_MCP:-1}"
 # Developer API (GOOGLE_API_KEY secret): billing-backed rate limits instead
 # of Vertex's dynamic shared quota, which 429'd drafting bursts on this
 # project. Everything else stays on Vertex (low volume; the Eval Service
-# judge is Vertex-only regardless). Validated 2026-06-11 on the
-# gemini-2.5-flash heavy tier — 2.5-pro hit Developer-API 503 timeouts on
-# long-form drafts. GOOGLE_GENAI_USE_VERTEXAI is set PER SERVICE in
-# 02-deploy-services.sh from these two knobs (it is NOT in the GENAI bundle).
+# judge is Vertex-only regardless). GOOGLE_GENAI_USE_VERTEXAI is set PER
+# SERVICE in 02-deploy-services.sh from these two knobs (it is NOT in the
+# GENAI bundle).
 USE_VERTEXAI_DEFAULT="${USE_VERTEXAI_DEFAULT:-true}"
 PIPELINE_USE_VERTEXAI="${PIPELINE_USE_VERTEXAI:-false}"
 

@@ -20,8 +20,8 @@ def _clear(monkeypatch):
 
 def test_builtin_defaults(monkeypatch):
     _clear(monkeypatch)
-    assert model_for(HEAVY) == "gemini-2.5-flash"
-    assert model_for(LIGHT) == "gemini-2.5-flash-lite"
+    assert model_for(HEAVY) == "gemini-3.5-flash"
+    assert model_for(LIGHT) == "gemini-3.1-flash-lite"
 
 
 def test_per_tier_env_override(monkeypatch):

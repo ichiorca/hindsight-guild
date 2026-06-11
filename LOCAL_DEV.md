@@ -441,14 +441,14 @@ escalation gate, eval-score injection, audit writes) are covered cloud-free by
 loop on Gemini against a low-AEO draft:
 
 ```bash
-GOOGLE_GENAI_USE_VERTEXAI=0 LOCAL_OVERRIDE_MODEL=gemini-2.5-flash \
+GOOGLE_GENAI_USE_VERTEXAI=0 LOCAL_OVERRIDE_MODEL=gemini-3.1-flash-lite \
 AEO_LIVE_TEST=1 MONGO_URI_DIRECT="mongodb://localhost:27017" \
   python -m pytest tests/integration/test_aeo_loop_live.py -q -s
 ```
 
-`LOCAL_OVERRIDE_MODEL` is required: the agents default to `gemini-3.x`
-(Vertex-only) and the model is resolved at import time, so the AI-Studio key
-needs a Developer-API model. `AEO_SKIP=1` turns the loop into a pass-through
+`LOCAL_OVERRIDE_MODEL` pins every agent to one cheap model (models resolve at
+import time): the free-tier AI-Studio key rate-limits the heavy-tier default,
+so use a lite model locally. `AEO_SKIP=1` turns the loop into a pass-through
 (useful when debugging the rest of the pipeline).
 
 ## Testing the closed-loop learning / skill evolution (PRD-03)
@@ -539,7 +539,7 @@ python -m scripts.local_seed
 | `SIGNAL_MAX_PER_TICK` | Max signal-triggered drafts the router enqueues per tick (default 3). |
 | `AEO_SKIP` | `1` = replace the AEO loop with a pass-through (skip scoring/rewrite). |
 | `AEO_LIVE_TEST` | `1` = run the live AEO loop test (opt-in; LLM + network). |
-| `LOCAL_OVERRIDE_MODEL` | Force every agent to one model (e.g. `gemini-2.5-flash`) for the local AI-Studio key. |
+| `LOCAL_OVERRIDE_MODEL` | Force every agent to one model (e.g. `gemini-3.1-flash-lite`) for the local AI-Studio key. |
 
 ## Troubleshooting
 
