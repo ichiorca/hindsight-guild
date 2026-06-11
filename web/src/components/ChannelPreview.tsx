@@ -277,7 +277,31 @@ function EmailPreview({ text, subject, image, className }: { text: string; subje
   );
 }
 
+/**
+ * Mirror shared/integrations/devto.py::derive_title — the title Dev.to will
+ * actually get at publish: first H1 anywhere in the markdown, else the first
+ * non-empty non-quote line (truncated). When an H1 is used, drop that line
+ * from the displayed body so the title isn't duplicated or stranded mid-post.
+ */
+function parseBlogDraft(text: string): { title: string; body: string } {
+  const cleaned = (text || "").replace(/```[\s\S]*?```/g, "");
+  const m = cleaned.match(/^\s*#\s+(.+?)\s*$/m);
+  if (m) {
+    return {
+      title: m[1].trim().slice(0, 120),
+      body: (text || "").replace(/^\s*#\s+.+$\r?\n?/m, "").trim(),
+    };
+  }
+  for (const line of cleaned.split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith(">")) continue;
+    return { title: t.length > 80 ? t.slice(0, 80) + "…" : t, body: text };
+  }
+  return { title: "Untitled draft", body: text };
+}
+
 function BlogPreview({ text, image, className }: { text: string; image?: PreviewImage | null; className?: string }) {
+  const { title, body } = parseBlogDraft(text);
   return (
     <div className={cn(
       "rounded-lg border bg-white dark:bg-card shadow-sm overflow-hidden",
@@ -288,8 +312,14 @@ function BlogPreview({ text, image, className }: { text: string; image?: Preview
           <ImageBlock image={image} aspect="16/9" rounded={false} />
         </div>
       )}
+      <div className="px-8 pt-6">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+          Dev.to article · title as it will publish
+        </p>
+        <h1 className="text-[26px] font-bold leading-tight tracking-tight">{title}</h1>
+      </div>
       <div className="prose-memo px-8 py-6 max-w-none">
-        {text.split("\n").map((line, i) => {
+        {body.split("\n").map((line, i) => {
           const trimmed = line.trim();
           if (trimmed.startsWith("## ")) return <h2 key={i}>{renderInline(trimmed.slice(3))}</h2>;
           if (trimmed.startsWith("# ")) return <h2 key={i} className="text-3xl mt-2">{renderInline(trimmed.slice(2))}</h2>;
