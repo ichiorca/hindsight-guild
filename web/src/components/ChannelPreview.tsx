@@ -5,10 +5,7 @@
  * decides on what the world will actually see, not on monospace card text.
  */
 
-import {
-  Heart, MessageCircle, Repeat2, Send, ThumbsUp,
-  Mail as MailIcon, Share2, BookmarkPlus, MoreHorizontal,
-} from "lucide-react";
+import { Mail as MailIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -185,30 +182,10 @@ function LinkedInPreview({ text, image, className }: { text: string; image?: Pre
         </div>
       </div>
       {image && (
-        <div className="border-b border-[#e6e9ec] dark:border-[#38434f]">
+        <div>
           <ImageBlock image={image} aspect="1/1" rounded={false} />
         </div>
       )}
-      <div className="px-4 py-2 border-b border-[#e6e9ec] dark:border-[#38434f] flex items-center justify-between text-[12px] text-[#666] dark:text-[#a0a8af]">
-        <div className="flex items-center gap-1">
-          <ThumbsUp className="h-3.5 w-3.5 fill-[#0a66c2] text-[#0a66c2]" />
-          <span>—</span>
-        </div>
-        <span>— comments · — reposts</span>
-      </div>
-      <div className="px-2 py-1 grid grid-cols-4 gap-1 text-[#666] dark:text-[#a0a8af] text-[13px]">
-        {[
-          { icon: ThumbsUp, label: "Like" },
-          { icon: MessageCircle, label: "Comment" },
-          { icon: Repeat2, label: "Repost" },
-          { icon: Send, label: "Send" },
-        ].map(({ icon: Icon, label }) => (
-          <button key={label} className="flex items-center justify-center gap-1 py-2 hover:bg-[#f3f6f8] dark:hover:bg-[#283038] rounded">
-            <Icon className="h-4 w-4" />
-            <span className="font-medium">{label}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -396,11 +373,6 @@ function SubstackPreview({ text, image, className }: { text: string; image?: Pre
           <span className="font-semibold text-foreground">Founder</span>
           <span>·</span>
           <span>now</span>
-          <span className="ml-auto flex items-center gap-3">
-            <BookmarkPlus className="h-3.5 w-3.5" />
-            <Share2 className="h-3.5 w-3.5" />
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </span>
         </div>
 
         {/* Featured image — Substack's signature visual element */}
@@ -438,27 +410,6 @@ function SubstackPreview({ text, image, className }: { text: string; image?: Pre
           })}
         </div>
       </article>
-
-      {/* Reaction row — Substack-style */}
-      <div className="border-t px-6 py-3 flex items-center justify-between text-[13px] text-muted-foreground">
-        <div className="flex items-center gap-4">
-          <button className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors">
-            <Heart className="h-4 w-4" />
-            <span>Like</span>
-          </button>
-          <button className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors">
-            <MessageCircle className="h-4 w-4" />
-            <span>Comment</span>
-          </button>
-          <button className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors">
-            <Repeat2 className="h-4 w-4" />
-            <span>Restack</span>
-          </button>
-        </div>
-        <button className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors">
-          <Share2 className="h-4 w-4" />
-        </button>
-      </div>
     </div>
   );
 }
