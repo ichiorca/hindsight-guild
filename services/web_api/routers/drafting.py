@@ -263,6 +263,21 @@ _BRACKET_RE = re.compile(
 )
 
 
+_WRAP_FENCE_RE = re.compile(r"^\s*```[a-zA-Z0-9_-]*[ \t]*\r?\n([\s\S]*?)\r?\n?```\s*$")
+
+
+def unfence(text: str) -> str:
+    """If the ENTIRE text is a single fenced code block (```/```json), return
+    the inner content. Models sometimes wrap a whole structured draft in a
+    fence, which breaks every startswith("{")-style JSON sniff downstream
+    (queue cards showed a literal ```json headline). A fence INSIDE a longer
+    draft (legit code sample) is left untouched."""
+    if not isinstance(text, str):
+        return text
+    m = _WRAP_FENCE_RE.match(text)
+    return m.group(1).strip() if m else text
+
+
 def strip_visual_artifacts(text: str) -> str:
     """Remove ASCII-art diagrams/tables + sketch/image placeholder captions
     that LLM agents sometimes draw INTO the draft body (it renders as broken
@@ -274,6 +289,7 @@ def strip_visual_artifacts(text: str) -> str:
     """
     if not text or not isinstance(text, str):
         return text
+    text = unfence(text)
 
     def _is_art(block: str) -> bool:
         if any(c in block for c in _BOX_CHARS):
@@ -296,7 +312,7 @@ def subject_from_draft(draft: object) -> str | None:
     ``headline``. Channels with no native subject (LinkedIn, blog) return None
     and the UI falls back to a body preview. Accepts the draft as a dict or a
     JSON string (the Content agent returns JSON for email/substack)."""
-    d = draft
+    d = unfence(draft) if isinstance(draft, str) else draft
     # If it's a JSON string, parse it and read the structured field. If it's a
     # plain string, fall THROUGH to the plain-text heuristics below (do NOT
     # early-return — that was a bug that dropped every "Subject:" line).

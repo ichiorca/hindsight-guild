@@ -1058,7 +1058,13 @@ What to evaluate:
    CTA. This is the #1 recurring miss — drafts keep scoring at the floor on
    conversion_intent because they trail off without a clear ask.
 
-7. **Length + structure**. Substack 1100–1800 words; LinkedIn POST under
+7. **Not-a-draft check**. If the draft is raw JSON / a dict echo of the
+   inputs (keys like approved_claims, customer_voice, web_findings,
+   icp_description) or the whole thing is wrapped in a markdown code fence,
+   it is NOT a draft: set severity "high" and add a specific_revisions item
+   "Discard this output and WRITE the actual {channel} asset as prose."
+
+8. **Length + structure**. Substack 1100–1800 words; LinkedIn POST under
    1300 chars (hard platform limit 3000 — over that it cannot publish);
    LinkedIn ARTICLE (channel linkedin_article) 800–1500 words opening with a
    `# Title` H1; Email under 300 words; Blog outline ≥ 4 H2 sections.

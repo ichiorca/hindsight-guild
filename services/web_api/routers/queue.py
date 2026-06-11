@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from services.web_api.routers.drafting import strip_visual_artifacts, subject_from_draft
+from services.web_api.routers.drafting import strip_visual_artifacts, subject_from_draft, unfence
 from shared import mongo_tools
 
 router = APIRouter()
@@ -173,6 +173,17 @@ def get_queue(channel: str | None = None, limit: int = 50):
         # body_markdown}). Flatten to a single preview string for the Queue
         # card; the publish flow reads the structured fields separately.
         draft_blob = raw.get("draft") or raw.get("output_text") or ""
+        # Models sometimes fence the whole JSON envelope (```json ... ```):
+        # unfence, then parse so the dict-flatten below still applies.
+        if isinstance(draft_blob, str):
+            draft_blob = unfence(draft_blob)
+            if draft_blob.lstrip().startswith("{"):
+                try:
+                    parsed_blob = json.loads(draft_blob)
+                    if isinstance(parsed_blob, dict):
+                        draft_blob = parsed_blob
+                except Exception:
+                    pass
         if isinstance(draft_blob, dict):
             headline = draft_blob.get("headline") or ""
             body = draft_blob.get("body_markdown") or draft_blob.get("body") or ""
@@ -249,6 +260,17 @@ def _queue_from_mongo(channel: str | None, limit: int) -> list[QueueItem]:
         raw = r.get("raw") or {}
         # Substack drafts arrive as a structured dict; flatten for preview.
         draft_blob = raw.get("draft") or raw.get("output_text") or ""
+        # Models sometimes fence the whole JSON envelope (```json ... ```):
+        # unfence, then parse so the dict-flatten below still applies.
+        if isinstance(draft_blob, str):
+            draft_blob = unfence(draft_blob)
+            if draft_blob.lstrip().startswith("{"):
+                try:
+                    parsed_blob = json.loads(draft_blob)
+                    if isinstance(parsed_blob, dict):
+                        draft_blob = parsed_blob
+                except Exception:
+                    pass
         if isinstance(draft_blob, dict):
             head = draft_blob.get("headline") or ""
             body = draft_blob.get("body_markdown") or draft_blob.get("body") or ""
@@ -661,7 +683,7 @@ def _publish_devto(d: Decision, icp_segment: str, topic_hint: str) -> dict:
         derive_title,
         publish_article,
     )
-    body_md = d.approved_text or ""
+    body_md = unfence(d.approved_text or "")
     if body_md.lstrip().startswith("{"):
         try:
             obj = json.loads(body_md)
@@ -701,7 +723,7 @@ def _coerce_email_sequence(approved_text: str, topic_hint: str) -> tuple[list[di
     a single JSON step, or plain text/markdown (wrapped as a 1-step
     sequence with a derived subject).
     """
-    text = (approved_text or "").strip()
+    text = unfence((approved_text or "").strip())
     if text.startswith("{"):
         try:
             obj = json.loads(text)

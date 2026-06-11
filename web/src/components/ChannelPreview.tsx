@@ -9,6 +9,17 @@ import { Mail as MailIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
+ * If the ENTIRE text is one fenced code block (```/```json), unwrap it —
+ * models sometimes fence a whole structured draft, which broke JSON parsing
+ * and made cards show a literal "```json" headline. Mid-text fences (real
+ * code samples) are untouched. Mirrors drafting.py::unfence.
+ */
+function unfence(text: string): string {
+  const m = (text || "").match(/^\s*```[a-zA-Z0-9_-]*[ \t]*\r?\n([\s\S]*?)\r?\n?```\s*$/);
+  return m ? m[1].trim() : text;
+}
+
+/**
  * LinkedIn renders plain text only — mirror shared/integrations/linkedin.py's
  * _strip_markdown so the preview shows exactly what ships (drafts sometimes
  * arrive with markdown bold/bullets; the publish adapter strips them).
@@ -83,6 +94,7 @@ function ExtraVisuals({ images }: { images: PreviewImage[] }) {
 }
 
 export function ChannelPreview({ channel, text, subject, image, images, className }: ChannelPreviewProps) {
+  text = unfence(text);
   const imgs = images && images.length ? images : image ? [image] : [];
   const primary = imgs[0] ?? null;
   const inner =

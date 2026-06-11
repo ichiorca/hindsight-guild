@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from datetime import UTC, datetime
 
 from flask import Flask, jsonify, request
@@ -175,6 +176,16 @@ def publish():
 # Helpers
 # ---------------------------------------------------------------------------
 
+_WRAP_FENCE_RE = re.compile(r"^\s*```[a-zA-Z0-9_-]*[ \t]*\r?\n([\s\S]*?)\r?\n?```\s*$")
+
+
+def _unfence(text: str) -> str:
+    if not isinstance(text, str):
+        return text
+    m = _WRAP_FENCE_RE.match(text)
+    return m.group(1).strip() if m else text
+
+
 def _read_draft(telemetry_id: str) -> dict | None:
     """The Content Agent emits a Substack draft as JSON in telemetry.actions.raw."""
     sql = f"""
@@ -190,6 +201,7 @@ def _read_draft(telemetry_id: str) -> dict | None:
         return None
     raw = row.raw
     if isinstance(raw, str):
+        raw = _unfence(raw)
         try:
             raw = json.loads(raw)
         except Exception:
@@ -200,6 +212,7 @@ def _read_draft(telemetry_id: str) -> dict | None:
             return raw
         inner = raw.get("draft")
         if isinstance(inner, str):
+            inner = _unfence(inner)
             try:
                 return json.loads(inner)
             except Exception:
@@ -225,6 +238,7 @@ def _read_image(telemetry_id: str) -> dict | None:
         return None
     raw = row.raw
     if isinstance(raw, str):
+        raw = _unfence(raw)
         try:
             raw = json.loads(raw)
         except Exception:
